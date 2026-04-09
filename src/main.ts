@@ -123,30 +123,36 @@ async function main() {
   }
 
   // Step 7: Resolve seller names
-  const uniqueSellerIds = [
-    ...new Set(
-      allProductos
-        .map((p) => p.vendedor)
-        .filter((v): v is string => !!v && v !== "-1")
-    ),
-  ];
+  // Collect unique seller IDs with their domain for lookup
+  const sellerDomainMap = new Map<string, number>(); // sellerId → domain number
+  for (const p of allProductos) {
+    if (p.vendedor && p.vendedor !== "-1") {
+      const country = COUNTRIES.find((c) => c.code === p.pais);
+      if (country && !sellerDomainMap.has(p.vendedor)) {
+        sellerDomainMap.set(p.vendedor, country.domain);
+      }
+    }
+  }
+  const uniqueSellerIds = [...sellerDomainMap.keys()];
   console.log(`\nVendedores únicos a resolver: ${uniqueSellerIds.length}`);
 
   const sellerCache = await getCachedSellers(uniqueSellerIds, supabaseUrl, supabaseKey);
 
   const missingSellers = uniqueSellerIds.filter((id) => !sellerCache.has(id));
   if (missingSellers.length > 0) {
-    // Fetch missing sellers — use ES domain (8) as reference for name lookup
-    const newNames = await fetchSellerNames(missingSellers, 8, keepaKey);
-    for (const [id, name] of newNames) {
-      sellerCache.set(id, name);
+    const newVendedores: { sellerId: string; nombre: string }[] = [];
+    // Fetch each missing seller in its own domain for best name accuracy
+    for (const sellerId of missingSellers) {
+      const domain = sellerDomainMap.get(sellerId) ?? 8;
+      const names = await fetchSellerNames([sellerId], domain, keepaKey);
+      const name = names.get(sellerId);
+      if (name) {
+        sellerCache.set(sellerId, name);
+        newVendedores.push({ sellerId, nombre: name });
+      }
     }
-    await upsertVendedores(
-      [...newNames.entries()].map(([sellerId, nombre]) => ({ sellerId, nombre })),
-      supabaseUrl,
-      supabaseKey
-    );
-    console.log(`  ${newNames.size} vendedores guardados en caché`);
+    await upsertVendedores(newVendedores, supabaseUrl, supabaseKey);
+    console.log(`  ${newVendedores.length} vendedores guardados en caché`);
   }
 
   // Apply seller names to products

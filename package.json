@@ -1,0 +1,17 @@
+{
+  "name": "final-keepa-dashboard-zoco",
+  "version": "1.0.0",
+  "description": "Amazon BuyBox monitor — Keepa API → Supabase, scheduled via GitHub Actions",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "dev": "tsx --env-file=.env src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0"
+  }
+}

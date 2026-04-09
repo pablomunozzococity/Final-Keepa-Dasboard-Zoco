@@ -1,0 +1,29 @@
+name: BuyBox Update
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"   # cada 3 horas
+  workflow_dispatch:          # permite lanzarlo manualmente desde GitHub
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run BuyBox update
+        run: npm start
+        env:
+          KEEPA_API_KEY:    ${{ secrets.KEEPA_API_KEY }}
+          SUPABASE_URL:     ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:     ${{ secrets.SUPABASE_KEY }}
+          MI_VENDEDOR_ID:   ${{ secrets.MI_VENDEDOR_ID }}
+          SUPABASE_TABLE:   ${{ secrets.SUPABASE_TABLE }}

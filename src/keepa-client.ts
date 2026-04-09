@@ -5,6 +5,8 @@ type KeepaStats = {
   current: (number | null)[];
   min: (number | null)[];
   atIntervalStart: (number | null)[] | null;
+  buyBoxSellerId?: string | null;
+  buyBoxIsFBA?: boolean | null;
 };
 
 type KeepaProduct = {
@@ -12,8 +14,6 @@ type KeepaProduct = {
   title?: string;
   brand?: string;
   imagesCSV?: string;
-  buyBoxSellerId?: string | null;
-  buyBoxIsFBA?: boolean | null;
   rating?: number;
   promotions?: unknown[] | null;
   salesRanks?: Record<string, number[]> | null;
@@ -113,16 +113,17 @@ function mapProduct(
   pais: string,
   miVendedorId: string
 ): ProductoRecord {
-  const rawPrecio = p.stats.current[10];
-  const rawMin = p.stats.min[10];
-  const rawStart = p.stats.atIntervalStart?.[10];
+  // Index 28 = BuyBox price (with buybox=1 parameter)
+  const rawPrecio = p.stats.current[28];
+  const rawMin = p.stats.min[28];
+  const rawStart = p.stats.atIntervalStart?.[28];
 
   const precio = keepaPrice(rawPrecio);
   const precio_min = keepaPrice(rawMin);
   const cambio_1d = calcCambio1d(rawPrecio, rawStart);
 
   const hay_buybox = precio !== null;
-  const tenemos = hay_buybox && p.buyBoxSellerId === miVendedorId;
+  const tenemos = hay_buybox && p.stats.buyBoxSellerId === miVendedorId;
 
   const rating =
     typeof p.rating === "number" && p.rating > 0 ? p.rating / 10 : null;
@@ -144,11 +145,11 @@ function mapProduct(
     pais,
     titulo: p.title ?? "",
     marca: p.brand ?? "",
-    vendedor: p.buyBoxSellerId ?? null,
+    vendedor: p.stats.buyBoxSellerId ?? null,
     precio,
     precio_min,
     cambio_1d,
-    es_fba: p.buyBoxIsFBA ?? null,
+    es_fba: p.stats.buyBoxIsFBA ?? null,
     img_url: extractImgUrl(p.imagesCSV),
     tenemos,
     hay_buybox,
@@ -209,7 +210,8 @@ export async function fetchKeepaProducts(
       `?key=${keepaKey}` +
       `&domain=${domain}` +
       `&asin=${asinParam}` +
-      `&stats=1`;
+      `&stats=90` +
+      `&buybox=1`;
 
     console.log(
       `  [${pais}] batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.length} ASINs`

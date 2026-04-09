@@ -50,8 +50,11 @@ export type ProductoRecord = {
   updated_at: string;
 };
 
+const MAX_REASONABLE_PRICE = 500000; // €5000 — filters Keepa data corruption
+
 function keepaPrice(raw: number | null | undefined): number | null {
   if (raw == null || raw <= 0) return null;
+  if (raw > MAX_REASONABLE_PRICE) return null; // corrupted data
   return Math.round(raw) / 100;
 }
 

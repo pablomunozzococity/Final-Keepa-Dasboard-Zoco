@@ -1,13 +1,8 @@
 import type { ProductoRecord } from "./keepa-client.js";
+import type { CategoryInfo } from "./category-client.js";
 
-const BATCH_SIZE = 500; // Supabase default row limit per request
+const BATCH_SIZE = 500;
 
-/**
- * Upserts an array of ProductoRecord into the specified Supabase table.
- * Uses on_conflict=asin,pais so existing rows are updated, not duplicated.
- * Pass table="productos_test" for testing, "productos" for production.
- * Returns the total number of rows processed.
- */
 export async function upsertProductos(
   productos: ProductoRecord[],
   supabaseUrl: string,
@@ -46,4 +41,85 @@ export async function upsertProductos(
   }
 
   return { count: totalCount };
+}
+
+export async function getCachedCategories(
+  pairs: { catId: number; domain: string }[],
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<Map<string, CategoryInfo>> {
+  const cache = new Map<string, CategoryInfo>();
+  if (pairs.length === 0) return cache;
+
+  const headers = {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+  };
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const catIds = [...new Set(pairs.map((p) => p.catId))].join(",");
+
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/categorias_cache?cat_id=in.(${catIds})&updated_at=gte.${cutoff}&select=*`,
+    { headers }
+  );
+
+  if (!res.ok) return cache;
+
+  const rows = (await res.json()) as {
+    cat_id: number;
+    domain: string;
+    nombre: string;
+    total: number;
+  }[];
+
+  for (const row of rows) {
+    cache.set(`${row.cat_id}:${row.domain}`, {
+      catId: row.cat_id,
+      domain: row.domain,
+      nombre: row.nombre,
+      total: row.total,
+    });
+  }
+
+  return cache;
+}
+
+export async function upsertCategorias(
+  categorias: CategoryInfo[],
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<void> {
+  if (categorias.length === 0) return;
+
+  const headers = {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+    "Content-Type": "application/json",
+    Prefer: "return=minimal,resolution=merge-duplicates",
+  };
+
+  const rows = categorias.map((c) => ({
+    cat_id: c.catId,
+    domain: c.domain,
+    nombre: c.nombre,
+    total: c.total,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/categorias_cache?on_conflict=cat_id,domain`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(rows),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.warn(
+      `Category cache upsert warning: ${res.status} ${text.slice(0, 200)}`
+    );
+  }
 }

@@ -1,7 +1,12 @@
 import "dotenv/config";
 import { ASINS } from "./asins.js";
 import { fetchKeepaProducts } from "./keepa-client.js";
-import { upsertProductos } from "./supabase-client.js";
+import { fetchCategoryInfo } from "./category-client.js";
+import {
+  upsertProductos,
+  getCachedCategories,
+  upsertCategorias,
+} from "./supabase-client.js";
 
 type CountryConfig = {
   code: string;
@@ -34,9 +39,8 @@ async function main() {
     `Iniciando actualización: ${ASINS.length} ASINs × ${COUNTRIES.length} países → tabla: ${supabaseTable}`
   );
 
-  const results: Record<string, { upserted: number; error: string | null }> =
-    {};
-
+  // Step 1: Fetch all products from Keepa
+  const allProductos = [];
   for (const country of COUNTRIES) {
     console.log(`\n=== ${country.code} (domain ${country.domain}) ===`);
     try {
@@ -48,38 +52,85 @@ async function main() {
         miVendedorId
       );
       console.log(`  ${country.code}: ${productos.length} productos obtenidos`);
-
-      const { count } = await upsertProductos(
-        productos,
-        supabaseUrl,
-        supabaseKey,
-        supabaseTable
-      );
-      results[country.code] = { upserted: count, error: null };
-      console.log(`  ${country.code}: ${count} filas upserted en Supabase`);
+      allProductos.push(...productos);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      results[country.code] = { upserted: 0, error: message };
-      console.error(`  ${country.code} FALLÓ: ${message}`);
+      console.error(
+        `  ${country.code} FALLÓ: ${err instanceof Error ? err.message : err}`
+      );
     }
   }
 
-  const totalUpserted = Object.values(results).reduce(
-    (sum, r) => sum + r.upserted,
-    0
+  // Step 2: Collect unique (catId, domain) pairs that have a rank
+  const pairs: { catId: number; domain: string; domainNum: number }[] = [];
+  for (const p of allProductos) {
+    if (p.categoria_id && p.ranking_subcategoria) {
+      const country = COUNTRIES.find((c) => c.code === p.pais);
+      if (
+        country &&
+        !pairs.find((x) => x.catId === p.categoria_id && x.domain === p.pais)
+      ) {
+        pairs.push({ catId: p.categoria_id, domain: p.pais, domainNum: country.domain });
+      }
+    }
+  }
+
+  console.log(`\nCategorías únicas a resolver: ${pairs.length}`);
+
+  // Step 3: Check Supabase cache (valid for 24h)
+  const cached = await getCachedCategories(
+    pairs.map((p) => ({ catId: p.catId, domain: p.domain })),
+    supabaseUrl,
+    supabaseKey
   );
-  const failedCountries = Object.entries(results)
-    .filter(([, r]) => r.error !== null)
-    .map(([code]) => code);
+
+  // Step 4: Fetch missing categories from Keepa
+  const newCats = [];
+  for (const pair of pairs) {
+    const key = `${pair.catId}:${pair.domain}`;
+    if (!cached.has(key)) {
+      console.log(`  Fetching category ${pair.catId} for ${pair.domain}...`);
+      const info = await fetchCategoryInfo(
+        pair.catId,
+        pair.domainNum,
+        pair.domain,
+        keepaKey
+      );
+      if (info) {
+        cached.set(key, info);
+        newCats.push(info);
+      }
+    }
+  }
+
+  // Step 5: Store new categories in cache
+  if (newCats.length > 0) {
+    await upsertCategorias(newCats, supabaseUrl, supabaseKey);
+    console.log(`  ${newCats.length} categorías guardadas en caché`);
+  }
+
+  // Step 6: Calculate ranking_pct for each product
+  for (const p of allProductos) {
+    if (p.categoria_id && p.ranking_subcategoria) {
+      const key = `${p.categoria_id}:${p.pais}`;
+      const cat = cached.get(key);
+      if (cat && cat.total > 0) {
+        p.ranking_pct = Math.round((p.ranking_subcategoria / cat.total) * 10000) / 100;
+      }
+    }
+  }
+
+  // Step 7: Upsert all products to Supabase
+  console.log(`\nSubiendo ${allProductos.length} filas a Supabase...`);
+  const { count } = await upsertProductos(
+    allProductos,
+    supabaseUrl,
+    supabaseKey,
+    supabaseTable
+  );
 
   console.log(`\n${"=".repeat(40)}`);
-  console.log(`Total filas upserted: ${totalUpserted}`);
-  if (failedCountries.length > 0) {
-    console.warn(`Países con error: ${failedCountries.join(", ")}`);
-    process.exit(1);
-  } else {
-    console.log("Todos los países completados correctamente.");
-  }
+  console.log(`Total filas upserted: ${count}`);
+  console.log("Completado correctamente.");
 }
 
 main().catch((err) => {

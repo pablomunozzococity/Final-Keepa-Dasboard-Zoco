@@ -1,16 +1,5 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Keepa REST API client
-// Docs: https://keepa.com/#!api
-//
-// Domain codes: ES=8, FR=4, IT=10, DE=3
-// Prices in Keepa are integers (cents). -1 means "no data / no BuyBox".
-// ratings are integers 0–50 (e.g. 43 = 4.3 stars).
-// ─────────────────────────────────────────────────────────────────────────────
-
 const KEEPA_BASE = "https://api.keepa.com";
 const IMAGE_BASE = "https://images-na.ssl-images-amazon.com/images/I/";
-
-// ── Keepa API response types ──────────────────────────────────────────────────
 
 type KeepaStats = {
   current: (number | null)[];
@@ -28,6 +17,8 @@ type KeepaProduct = {
   rating?: number;
   promotions?: unknown[] | null;
   salesRanks?: Record<string, number[]> | null;
+  salesRankReference?: number | null;
+  categoryTree?: { catId: number; name: string }[] | null;
   stats: KeepaStats;
 };
 
@@ -35,8 +26,6 @@ type KeepaResponse = {
   products: KeepaProduct[];
   tokensLeft: number;
 };
-
-// ── Output type (matches Supabase productos schema) ───────────────────────────
 
 export type ProductoRecord = {
   asin: string;
@@ -54,10 +43,11 @@ export type ProductoRecord = {
   rating: number | null;
   oferta: string | null;
   ranking_subcategoria: number | null;
+  categoria_id: number | null;
+  categoria_nombre: string | null;
+  ranking_pct: number | null;
   updated_at: string;
 };
-
-// ── Internal helpers ──────────────────────────────────────────────────────────
 
 function keepaPrice(raw: number | null | undefined): number | null {
   if (raw == null || raw <= 0) return null;
@@ -77,21 +67,45 @@ function extractImgUrl(imagesCSV: string | undefined): string | null {
   if (!imagesCSV) return null;
   const first = imagesCSV.split(",")[0]?.trim();
   if (!first) return null;
-  // If Keepa already returns a full URL, use it directly; otherwise prepend base.
   if (first.startsWith("http")) return first;
   return `${IMAGE_BASE}${first}`;
 }
 
-function extractRankingSubcategoria(
-  salesRanks: Record<string, number[]> | null | undefined
-): number | null {
-  if (!salesRanks) return null;
-  // salesRanks format: { "categoryNodeId": [timestamp, rank, timestamp, rank, ...] }
-  // We want the most recent rank from the first (main) category entry.
-  const firstEntry = Object.values(salesRanks)[0];
-  if (!firstEntry || firstEntry.length < 2) return null;
-  // Last element is the most recent rank (alternating ts/rank pairs).
-  return firstEntry[firstEntry.length - 1] ?? null;
+function extractRanking(
+  salesRanks: Record<string, number[]> | null | undefined,
+  salesRankReference: number | null | undefined
+): { rank: number | null; catId: number | null } {
+  if (!salesRanks) return { rank: null, catId: null };
+
+  let catKey: string | null = null;
+  if (salesRankReference && salesRanks[String(salesRankReference)]) {
+    catKey = String(salesRankReference);
+  } else {
+    catKey = Object.keys(salesRanks)[0] ?? null;
+  }
+
+  if (!catKey) return { rank: null, catId: null };
+
+  const entry = salesRanks[catKey];
+  if (!entry || entry.length < 2) return { rank: null, catId: null };
+
+  const rank = entry[entry.length - 1];
+  return {
+    rank: rank > 0 ? rank : null,
+    catId: parseInt(catKey),
+  };
+}
+
+function extractCategoriaNombre(
+  categoryTree: { catId: number; name: string }[] | null | undefined,
+  catId: number | null
+): string | null {
+  if (!categoryTree || categoryTree.length === 0) return null;
+  if (catId) {
+    const found = categoryTree.find((c) => c.catId === catId);
+    if (found) return found.name;
+  }
+  return categoryTree[categoryTree.length - 1]?.name ?? null;
 }
 
 function mapProduct(
@@ -99,7 +113,6 @@ function mapProduct(
   pais: string,
   miVendedorId: string
 ): ProductoRecord {
-  // Index 10 in stats arrays = Buy Box price (inclusive of shipping)
   const rawPrecio = p.stats.current[10];
   const rawMin = p.stats.min[10];
   const rawStart = p.stats.atIntervalStart?.[10];
@@ -114,7 +127,6 @@ function mapProduct(
   const rating =
     typeof p.rating === "number" && p.rating > 0 ? p.rating / 10 : null;
 
-  // oferta: best-effort from promotions
   let oferta: string | null = null;
   if (p.promotions && p.promotions.length > 0) {
     try {
@@ -123,6 +135,9 @@ function mapProduct(
       oferta = null;
     }
   }
+
+  const { rank, catId } = extractRanking(p.salesRanks, p.salesRankReference);
+  const categoria_nombre = extractCategoriaNombre(p.categoryTree, catId);
 
   return {
     asin: p.asin,
@@ -139,12 +154,13 @@ function mapProduct(
     hay_buybox,
     rating,
     oferta,
-    ranking_subcategoria: extractRankingSubcategoria(p.salesRanks),
+    ranking_subcategoria: rank,
+    categoria_id: catId,
+    categoria_nombre,
+    ranking_pct: null, // calculated in main.ts after category lookup
     updated_at: new Date().toISOString(),
   };
 }
-
-// ── Fetch with retry on 429 ───────────────────────────────────────────────────
 
 async function fetchWithRetry(
   url: string,
@@ -157,7 +173,7 @@ async function fetchWithRetry(
       if (attempt === maxRetries) {
         throw new Error("Keepa rate limit: max retries exceeded");
       }
-      const delay = Math.pow(2, attempt) * 5000; // 5s, 10s, 20s
+      const delay = Math.pow(2, attempt) * 5000;
       console.warn(
         `Keepa 429 rate limit — waiting ${delay / 1000}s before retry ${attempt + 1}/${maxRetries}`
       );
@@ -175,13 +191,6 @@ async function fetchWithRetry(
   throw new Error("fetchWithRetry: unreachable");
 }
 
-// ── Public entry point ────────────────────────────────────────────────────────
-
-/**
- * Fetches Keepa product data for all ASINs in a given marketplace domain.
- * ASINs are sent in batches of 100 (Keepa maximum per request).
- * Returns a flat array of ProductoRecord ready for Supabase upsert.
- */
 export async function fetchKeepaProducts(
   asins: string[],
   domain: number,

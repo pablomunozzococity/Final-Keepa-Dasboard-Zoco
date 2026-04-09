@@ -366,7 +366,9 @@ async function loadData() {
       precioCambio: Math.abs(r.cambio_1d || 0) > 0.01,
       rating:  r.rating  ?? null,
       oferta:  r.oferta  || '',
-      rankingSub: r.ranking_subcategoria || '',
+      rankingSub:      r.ranking_subcategoria || null,
+      rankingPct:      r.ranking_pct ?? null,
+      categoriaNombre: r.categoria_nombre || null,
       updatedAt:  r.updated_at,
     }));
 
@@ -694,7 +696,15 @@ function renderTable() {
       html += '<td>'+cambio+'</td>';
       const fbaLabel = r.esFBA ? '<span class="fba-yes">FBA</span>' : '<span class="fba-no">FBM</span>';
       html += '<td>'+fbaLabel+' <a class="btn-amazon" href="https://www.'+getDomain(r.pais)+'/dp/'+r.asin+'" target="_blank" rel="noopener" style="margin-left:6px">↗ Ver</a></td>';
-      const rankHtml = r.rankingSub ? '<span style="background:rgba(52,152,219,.1);color:#2980b9;border:1px solid rgba(52,152,219,.25);border-radius:6px;padding:3px 8px;font-size:11px;font-family:monospace;white-space:nowrap">'+r.rankingSub+'</span>' : '<span style="color:#aab4c0">—</span>';
+      let rankHtml;
+      if (r.rankingSub) {
+        const rankNum = '# ' + Number(r.rankingSub).toLocaleString('es-ES');
+        const topPct  = r.rankingPct != null ? ' · <span style="color:#27ae60;font-weight:600">Top ' + (r.rankingPct < 1 ? r.rankingPct.toFixed(1) : Math.round(r.rankingPct)) + '%</span>' : '';
+        const catName = r.categoriaNombre ? ' · <span style="color:#6b7a8d">' + r.categoriaNombre + '</span>' : '';
+        rankHtml = '<span style="background:rgba(52,152,219,.1);color:#2980b9;border:1px solid rgba(52,152,219,.25);border-radius:6px;padding:3px 8px;font-size:11px;font-family:monospace;white-space:nowrap">' + rankNum + topPct + catName + '</span>';
+      } else {
+        rankHtml = '<span style="color:#aab4c0">—</span>';
+      }
       html += '<td>'+rankHtml+'</td>';
       html += '</tr>';
     });

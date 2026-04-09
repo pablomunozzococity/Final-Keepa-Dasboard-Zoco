@@ -2,10 +2,13 @@ import "dotenv/config";
 import { ASINS } from "./asins.js";
 import { fetchKeepaProducts } from "./keepa-client.js";
 import { fetchCategoryInfo } from "./category-client.js";
+import { fetchSellerNames } from "./seller-client.js";
 import {
   upsertProductos,
   getCachedCategories,
   upsertCategorias,
+  getCachedSellers,
+  upsertVendedores,
 } from "./supabase-client.js";
 
 type CountryConfig = {
@@ -119,7 +122,41 @@ async function main() {
     }
   }
 
-  // Step 7: Upsert all products to Supabase
+  // Step 7: Resolve seller names
+  const uniqueSellerIds = [
+    ...new Set(
+      allProductos
+        .map((p) => p.vendedor)
+        .filter((v): v is string => !!v && v !== "-1")
+    ),
+  ];
+  console.log(`\nVendedores únicos a resolver: ${uniqueSellerIds.length}`);
+
+  const sellerCache = await getCachedSellers(uniqueSellerIds, supabaseUrl, supabaseKey);
+
+  const missingSellers = uniqueSellerIds.filter((id) => !sellerCache.has(id));
+  if (missingSellers.length > 0) {
+    // Fetch missing sellers — use ES domain (8) as reference for name lookup
+    const newNames = await fetchSellerNames(missingSellers, 8, keepaKey);
+    for (const [id, name] of newNames) {
+      sellerCache.set(id, name);
+    }
+    await upsertVendedores(
+      [...newNames.entries()].map(([sellerId, nombre]) => ({ sellerId, nombre })),
+      supabaseUrl,
+      supabaseKey
+    );
+    console.log(`  ${newNames.size} vendedores guardados en caché`);
+  }
+
+  // Apply seller names to products
+  for (const p of allProductos) {
+    if (p.vendedor) {
+      p.vendedor_nombre = sellerCache.get(p.vendedor) ?? null;
+    }
+  }
+
+  // Step 8: Upsert all products to Supabase
   console.log(`\nSubiendo ${allProductos.length} filas a Supabase...`);
   const { count } = await upsertProductos(
     allProductos,

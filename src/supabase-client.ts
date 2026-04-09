@@ -123,3 +123,66 @@ export async function upsertCategorias(
     );
   }
 }
+
+export async function getCachedSellers(
+  sellerIds: string[],
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<Map<string, string>> {
+  const cache = new Map<string, string>();
+  if (sellerIds.length === 0) return cache;
+
+  const headers = {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+  };
+
+  const ids = sellerIds.map((id) => `"${id}"`).join(",");
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/vendedores_cache?seller_id=in.(${ids})&select=seller_id,nombre`,
+    { headers }
+  );
+
+  if (!res.ok) return cache;
+
+  const rows = (await res.json()) as { seller_id: string; nombre: string }[];
+  for (const row of rows) {
+    cache.set(row.seller_id, row.nombre);
+  }
+  return cache;
+}
+
+export async function upsertVendedores(
+  vendedores: { sellerId: string; nombre: string }[],
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<void> {
+  if (vendedores.length === 0) return;
+
+  const headers = {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+    "Content-Type": "application/json",
+    Prefer: "return=minimal,resolution=merge-duplicates",
+  };
+
+  const rows = vendedores.map((v) => ({
+    seller_id: v.sellerId,
+    nombre: v.nombre,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/vendedores_cache?on_conflict=seller_id`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(rows),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.warn(`Seller cache upsert warning: ${res.status} ${text.slice(0, 200)}`);
+  }
+}

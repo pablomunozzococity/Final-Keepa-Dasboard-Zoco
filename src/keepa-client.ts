@@ -46,6 +46,7 @@ export type ProductoRecord = {
   categoria_id: number | null;
   categoria_nombre: string | null;
   ranking_pct: number | null;
+  vendedor_nombre: string | null;
   updated_at: string;
 };
 
@@ -158,7 +159,8 @@ function mapProduct(
     ranking_subcategoria: rank,
     categoria_id: catId,
     categoria_nombre,
-    ranking_pct: null, // calculated in main.ts after category lookup
+    ranking_pct: null,      // calculated in main.ts after category lookup
+    vendedor_nombre: null,  // resolved in main.ts after seller lookup
     updated_at: new Date().toISOString(),
   };
 }

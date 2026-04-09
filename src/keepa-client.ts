@@ -109,22 +109,35 @@ function extractCategoriaNombre(
   return categoryTree[categoryTree.length - 1]?.name ?? null;
 }
 
+// BuyBox price indices in order of preference (Keepa CSV format with buybox=1)
+// 28 = BuyBox New (FBA), 18 = BuyBox (FBM), 10 = BuyBox fallback
+const BUYBOX_PRICE_INDICES = [28, 18, 10];
+
+function getBuyBoxPrice(arr: (number | null)[]): { raw: number | null; idx: number } {
+  for (const idx of BUYBOX_PRICE_INDICES) {
+    const v = arr[idx];
+    if (v != null && v > 0) return { raw: v, idx };
+  }
+  return { raw: null, idx: -1 };
+}
+
 function mapProduct(
   p: KeepaProduct,
   pais: string,
   miVendedorId: string
 ): ProductoRecord {
-  // Index 28 = BuyBox price (with buybox=1 parameter)
-  const rawPrecio = p.stats.current[28];
-  const rawMin = p.stats.min[28];
-  const rawStart = p.stats.atIntervalStart?.[28];
+  const { raw: rawPrecio, idx } = getBuyBoxPrice(p.stats.current);
+  const rawMin = idx >= 0 ? (p.stats.min[idx] ?? null) : null;
+  const rawStart = idx >= 0 ? (p.stats.atIntervalStart?.[idx] ?? null) : null;
 
   const precio = keepaPrice(rawPrecio);
   const precio_min = keepaPrice(rawMin);
   const cambio_1d = calcCambio1d(rawPrecio, rawStart);
 
-  const hay_buybox = precio !== null;
-  const tenemos = hay_buybox && p.stats.buyBoxSellerId === miVendedorId;
+  // hay_buybox: true if there's a known BuyBox seller (even if price is missing)
+  const buyBoxSellerId = p.stats.buyBoxSellerId;
+  const hay_buybox = !!(buyBoxSellerId && buyBoxSellerId !== "-1") || precio !== null;
+  const tenemos = hay_buybox && buyBoxSellerId === miVendedorId;
 
   const rating =
     typeof p.rating === "number" && p.rating > 0 ? p.rating / 10 : null;
@@ -146,11 +159,11 @@ function mapProduct(
     pais,
     titulo: p.title ?? "",
     marca: p.brand ?? "",
-    vendedor: p.stats.buyBoxSellerId ?? null,
     precio,
     precio_min,
     cambio_1d,
     es_fba: p.stats.buyBoxIsFBA ?? null,
+    vendedor: buyBoxSellerId && buyBoxSellerId !== "-1" ? buyBoxSellerId : null,
     img_url: extractImgUrl(p.imagesCSV),
     tenemos,
     hay_buybox,

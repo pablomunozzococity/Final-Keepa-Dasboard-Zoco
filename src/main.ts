@@ -5,7 +5,7 @@ import { fetchCategoryInfo } from "./category-client.js";
 import { fetchSellerNames } from "./seller-client.js";
 import {
   upsertProductos,
-  deleteProductosByCountry,
+  deleteProductosByAsins,
   getCachedCategories,
   upsertCategorias,
   getCachedSellers,
@@ -192,18 +192,36 @@ async function main() {
     }
   }
 
-  // Step 8: Replace data in Supabase — delete old rows per country, then insert fresh data
-  const paisesActualizados = [...new Set(allProductos.map((p) => p.pais))];
-  console.log(`\nReemplazando datos en Supabase para: [${paisesActualizados.join(", ")}]`);
-
-  for (const pais of paisesActualizados) {
-    console.log(`  Eliminando filas antiguas de ${pais}...`);
-    await deleteProductosByCountry(pais, supabaseUrl, supabaseKey, supabaseTable);
+  // Step 8: Replace data in Supabase — delete old rows per country, then insert fresh data.
+  // Only replace ASINs where Keepa returned a non-empty title. If Keepa returns an ASIN
+  // without a title (product not indexed yet, or a transient gap), skip it entirely so we
+  // don't wipe the previously-stored good data for that product.
+  const productosConTitulo = allProductos.filter(p => p.titulo.trim() !== "");
+  const sinTitulo = allProductos.length - productosConTitulo.length;
+  if (sinTitulo > 0) {
+    console.log(`  ⚠ ${sinTitulo} productos sin título omitidos (Keepa no tiene datos aún)`);
   }
 
-  console.log(`  Insertando ${allProductos.length} filas nuevas...`);
+  // Build per-country ASIN lists to do a targeted delete (not a full country wipe),
+  // so ASINs skipped above keep their existing rows.
+  type PaisList = Map<string, string[]>;
+  const asinsPorPais: PaisList = new Map();
+  for (const p of productosConTitulo) {
+    if (!asinsPorPais.has(p.pais)) asinsPorPais.set(p.pais, []);
+    asinsPorPais.get(p.pais)!.push(p.asin);
+  }
+
+  const paisesActualizados = [...asinsPorPais.keys()];
+  console.log(`\nReemplazando datos en Supabase para: [${paisesActualizados.join(", ")}]`);
+
+  for (const [pais, asins] of asinsPorPais) {
+    console.log(`  Eliminando ${asins.length} filas antiguas de ${pais}...`);
+    await deleteProductosByAsins(asins, pais, supabaseUrl, supabaseKey, supabaseTable);
+  }
+
+  console.log(`  Insertando ${productosConTitulo.length} filas nuevas...`);
   const { count } = await upsertProductos(
-    allProductos,
+    productosConTitulo,
     supabaseUrl,
     supabaseKey,
     supabaseTable

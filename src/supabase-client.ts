@@ -3,6 +3,34 @@ import type { CategoryInfo } from "./category-client.js";
 
 const BATCH_SIZE = 500;
 
+export async function deleteProductosByAsins(
+  asins: string[],
+  pais: string,
+  supabaseUrl: string,
+  supabaseKey: string,
+  table = "productos"
+): Promise<void> {
+  if (asins.length === 0) return;
+
+  const headers = {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+  };
+
+  const asinList = asins.join(",");
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/${table}?pais=eq.${pais}&asin=in.(${asinList})`,
+    { method: "DELETE", headers }
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Supabase delete failed for ${pais} ASINs: ${res.status} ${text.slice(0, 300)}`
+    );
+  }
+}
+
 export async function deleteProductosByCountry(
   pais: string,
   supabaseUrl: string,

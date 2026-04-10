@@ -383,10 +383,6 @@ async function loadData() {
         d.toLocaleDateString('es-ES', {timeZone:'Europe/Madrid'}) + ' ' + d.toLocaleTimeString('es-ES', {hour:'2-digit',minute:'2-digit',timeZone:'Europe/Madrid'});
     }
 
-    // ASINs where no country has a title — Keepa has no data for them yet, hide them
-    const asinsConDatos = new Set(allData.filter(r => r.titulo).map(r => r.asin));
-    allData = allData.filter(r => asinsConDatos.has(r.asin));
-
     setLoadingBar(100);
     updateSelects();
     applyFilters();
@@ -722,7 +718,8 @@ function renderTable() {
 
       html += '<tr>';
       html += '<td style="padding:8px 8px 8px 14px"><div style="width:52px;height:52px;position:relative">'+imgHtml+'</div></td>';
-      html += '<td><div class="product-name" title="'+r.titulo+'">'+( r.titulo||'—')+'</div>'+asinHtml(r.asin)+'</td>';
+      const tituloFlat = r.titulo || '<span style="color:#aab4c0;font-style:italic">Sin datos de Keepa</span>';
+      html += '<td><div class="product-name" title="'+(r.titulo||r.asin)+'">'+tituloFlat+'</div>'+asinHtml(r.asin)+'</td>';
       html += '<td style="font-size:12px;color:#6b7a8d">'+(r.marca||'—')+'</td>';
       html += '<td>'+bbBadge+'</td>';
       html += '<td>'+fmtP(r.precio)+(r.precioMin!=null?' <span style="font-size:11px;color:#3498db;margin-left:4px">mín '+Number(r.precioMin).toFixed(2)+' €</span>':'')+'</td>';
@@ -767,7 +764,8 @@ function renderTable() {
       html += '<tr class="main-row" onclick="toggleRow('+idx+')" style="cursor:pointer">';
       html += '<td style="padding-left:14px"><span class="chevron" id="chev'+idx+'">▶</span></td>';
       html += '<td style="padding:8px 8px 8px 4px"><div style="width:52px;height:52px;position:relative">'+imgHtml+'</div></td>';
-      html += '<td><div class="product-name" title="'+g.titulo+'">'+( g.titulo||'—')+'</div>'+asinHtml(g.asin)+'</td>';
+      const tituloDisplay = g.titulo || '<span style="color:#aab4c0;font-style:italic">Sin datos de Keepa</span>';
+      html += '<td><div class="product-name" title="'+(g.titulo||g.asin)+'">'+tituloDisplay+'</div>'+asinHtml(g.asin)+'</td>';
       html += '<td style="font-size:12px;color:#6b7a8d">'+(g.marca||'—')+'</td>';
       html += '<td><div class="country-badges">'+pills+'</div></td>';
       html += '<td>'+fmtRating(g.rating)+'</td>';

@@ -3,6 +3,30 @@ import type { CategoryInfo } from "./category-client.js";
 
 const BATCH_SIZE = 500;
 
+export async function deleteProductosByCountry(
+  pais: string,
+  supabaseUrl: string,
+  supabaseKey: string,
+  table = "productos"
+): Promise<void> {
+  const headers = {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+  };
+
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/${table}?pais=eq.${pais}`,
+    { method: "DELETE", headers }
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Supabase delete failed for ${pais}: ${res.status} ${text.slice(0, 300)}`
+    );
+  }
+}
+
 export async function upsertProductos(
   productos: ProductoRecord[],
   supabaseUrl: string,

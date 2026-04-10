@@ -2,10 +2,10 @@ name: BuyBox Update
 
 on:
   schedule:
-    - cron: "57 0,4,8,12,16,20 * * *"   # run 1: ES+FR, mitad 1 — tokens al máximo
-    - cron: "57 1,5,9,13,17,21 * * *"   # run 2: ES+FR, mitad 2
-    - cron: "57 2,6,10,14,18,22 * * *"  # run 3: IT+DE, mitad 1
-    - cron: "57 3,7,11,15,19,23 * * *"  # run 4: IT+DE, mitad 2
+    - cron: "57 0,4,8,12,16,20 * * *"   # run 1: ES — todos los ASINs
+    - cron: "57 1,5,9,13,17,21 * * *"   # run 2: FR — todos los ASINs
+    - cron: "57 2,6,10,14,18,22 * * *"  # run 3: IT — todos los ASINs
+    - cron: "57 3,7,11,15,19,23 * * *"  # run 4: DE — todos los ASINs
   workflow_dispatch:
     inputs:
       run_number:

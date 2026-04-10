@@ -627,8 +627,15 @@ function fmtOferta(val) {
 function groupByAsin(rows) {
   const map = new Map();
   rows.forEach(r => {
-    if (!map.has(r.asin)) map.set(r.asin, { asin: r.asin, titulo: r.titulo, marca: r.marca, rating: r.rating, oferta: r.oferta, imgUrl: r.imgUrl, paises: [] });
-    map.get(r.asin).paises.push(r);
+    if (!map.has(r.asin)) map.set(r.asin, { asin: r.asin, titulo: '', marca: '', rating: null, oferta: '', imgUrl: '', paises: [] });
+    const g = map.get(r.asin);
+    // Pick best available value across all country rows (some countries may have empty data)
+    if (!g.titulo  && r.titulo)  g.titulo  = r.titulo;
+    if (!g.marca   && r.marca)   g.marca   = r.marca;
+    if (!g.imgUrl  && r.imgUrl)  g.imgUrl  = r.imgUrl;
+    if (g.rating == null && r.rating != null) g.rating = r.rating;
+    if (!g.oferta  && r.oferta)  g.oferta  = r.oferta;
+    g.paises.push(r);
   });
   // Propagar FBA: si el ASIN es FBA en algún país, asumirlo donde no hay dato (null)
   // Si explícitamente es FBM (false) en un país, respetarlo

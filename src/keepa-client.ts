@@ -210,17 +210,33 @@ async function fetchWithRetry(
   throw new Error("fetchWithRetry: unreachable");
 }
 
+const MIN_TOKENS_THRESHOLD = 300; // stop before a batch if fewer tokens remain
+
+export type FetchResult = {
+  records: ProductoRecord[];
+  tokensLeft: number;
+  stoppedEarly: boolean;
+};
+
 export async function fetchKeepaProducts(
   asins: string[],
   domain: number,
   pais: string,
   keepaKey: string,
   miVendedorId: string
-): Promise<ProductoRecord[]> {
+): Promise<FetchResult> {
   const BATCH_SIZE = 100;
   const records: ProductoRecord[] = [];
+  let tokensLeft = Infinity;
 
   for (let i = 0; i < asins.length; i += BATCH_SIZE) {
+    if (tokensLeft < MIN_TOKENS_THRESHOLD) {
+      console.warn(
+        `  [${pais}] ⚠ Solo quedan ${tokensLeft} tokens — deteniendo para no agotar el límite`
+      );
+      return { records, tokensLeft, stoppedEarly: true };
+    }
+
     const batch = asins.slice(i, i + BATCH_SIZE);
     const asinParam = batch.join(",");
     const url =
@@ -232,13 +248,14 @@ export async function fetchKeepaProducts(
       `&buybox=1`;
 
     console.log(
-      `  [${pais}] batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.length} ASINs`
+      `  [${pais}] batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.length} ASINs (tokens disponibles: ${tokensLeft === Infinity ? "?" : tokensLeft})`
     );
 
     const data = await fetchWithRetry(url);
+    tokensLeft = data.tokensLeft;
 
     console.log(
-      `  [${pais}] batch ${Math.floor(i / BATCH_SIZE) + 1}: received ${data.products?.length ?? 0} products, tokens left: ${data.tokensLeft}`
+      `  [${pais}] batch ${Math.floor(i / BATCH_SIZE) + 1}: ${data.products?.length ?? 0} productos recibidos, tokens restantes: ${tokensLeft}`
     );
 
     for (const p of data.products ?? []) {
@@ -246,5 +263,5 @@ export async function fetchKeepaProducts(
     }
   }
 
-  return records;
+  return { records, tokensLeft, stoppedEarly: false };
 }

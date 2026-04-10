@@ -5,6 +5,7 @@ import { fetchCategoryInfo } from "./category-client.js";
 import { fetchSellerNames } from "./seller-client.js";
 import {
   upsertProductos,
+  deleteProductosByCountry,
   getCachedCategories,
   upsertCategorias,
   getCachedSellers,
@@ -56,20 +57,35 @@ async function main() {
     `Iniciando actualización: run=${runNumber ?? "todos"} → ${ASINS.length} ASINs × [${COUNTRIES.map(c => c.code).join(", ")}] → tabla: ${supabaseTable}`
   );
 
-  // Step 1: Fetch all products from Keepa
+  // Step 1: Fetch all products from Keepa, then replace country data in Supabase
+  // Fetch first — if Keepa fails, existing data is preserved.
+  // Only delete + insert when the fetch succeeds (even if partial).
   const allProductos = [];
   for (const country of COUNTRIES) {
     console.log(`\n=== ${country.code} (domain ${country.domain}) ===`);
     try {
-      const productos = await fetchKeepaProducts(
+      const result = await fetchKeepaProducts(
         ASINS,
         country.domain,
         country.code,
         keepaKey,
         miVendedorId
       );
-      console.log(`  ${country.code}: ${productos.length} productos obtenidos`);
-      allProductos.push(...productos);
+
+      if (result.records.length === 0) {
+        console.warn(`  ${country.code}: sin productos — omitiendo reemplazo en Supabase`);
+        continue;
+      }
+
+      if (result.stoppedEarly) {
+        console.warn(
+          `  ${country.code}: run parcial (${result.records.length} productos) por tokens insuficientes — omitiendo reemplazo para no dejar datos incompletos`
+        );
+        continue;
+      }
+
+      console.log(`  ${country.code}: ${result.records.length} productos obtenidos`);
+      allProductos.push(...result.records);
     } catch (err) {
       console.error(
         `  ${country.code} FALLÓ: ${err instanceof Error ? err.message : err}`
@@ -176,8 +192,16 @@ async function main() {
     }
   }
 
-  // Step 8: Upsert all products to Supabase
-  console.log(`\nSubiendo ${allProductos.length} filas a Supabase...`);
+  // Step 8: Replace data in Supabase — delete old rows per country, then insert fresh data
+  const paisesActualizados = [...new Set(allProductos.map((p) => p.pais))];
+  console.log(`\nReemplazando datos en Supabase para: [${paisesActualizados.join(", ")}]`);
+
+  for (const pais of paisesActualizados) {
+    console.log(`  Eliminando filas antiguas de ${pais}...`);
+    await deleteProductosByCountry(pais, supabaseUrl, supabaseKey, supabaseTable);
+  }
+
+  console.log(`  Insertando ${allProductos.length} filas nuevas...`);
   const { count } = await upsertProductos(
     allProductos,
     supabaseUrl,
@@ -186,7 +210,7 @@ async function main() {
   );
 
   console.log(`\n${"=".repeat(40)}`);
-  console.log(`Total filas upserted: ${count}`);
+  console.log(`Total filas insertadas: ${count}`);
   console.log("Completado correctamente.");
 }
 

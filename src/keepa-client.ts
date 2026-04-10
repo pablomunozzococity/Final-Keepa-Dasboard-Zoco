@@ -210,7 +210,7 @@ async function fetchWithRetry(
   throw new Error("fetchWithRetry: unreachable");
 }
 
-const MIN_TOKENS_THRESHOLD = 300; // stop before a batch if fewer tokens remain
+const MIN_TOKENS_THRESHOLD = 100; // stop before a batch if fewer tokens remain
 
 export type FetchResult = {
   records: ProductoRecord[];

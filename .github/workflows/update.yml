@@ -2,8 +2,14 @@ name: BuyBox Update
 
 on:
   schedule:
-    - cron: "0 */3 * * *"   # cada 3 horas
-  workflow_dispatch:          # permite lanzarlo manualmente desde GitHub
+    - cron: "0 6 * * *"   # batch 1 — 06:00 UTC diario
+    - cron: "0 7 * * *"   # batch 2 — 07:00 UTC diario (1h después)
+  workflow_dispatch:        # lanzamiento manual desde GitHub
+    inputs:
+      batch:
+        description: "Batch a ejecutar (1, 2 o vacío para todos)"
+        required: false
+        default: ""
 
 jobs:
   update:
@@ -19,6 +25,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Determine batch number
+        id: batch
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "number=${{ github.event.inputs.batch }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "0 6 * * *" ]; then
+            echo "number=1" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "0 7 * * *" ]; then
+            echo "number=2" >> $GITHUB_OUTPUT
+          else
+            echo "number=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run BuyBox update
         run: npm start
         env:
@@ -26,4 +45,5 @@ jobs:
           SUPABASE_URL:     ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:     ${{ secrets.SUPABASE_KEY }}
           MI_VENDEDOR_ID:   ${{ secrets.MI_VENDEDOR_ID }}
-          SUPABASE_TABLE:   ${{ secrets.SUPABASE_TABLE }}
+          SUPABASE_TABLE:   productos
+          BATCH_NUMBER:     ${{ steps.batch.outputs.number }}

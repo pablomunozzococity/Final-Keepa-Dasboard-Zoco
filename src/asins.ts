@@ -1,11 +1,4 @@
 // ── ASINs a monitorizar ───────────────────────────────────────────────────────
-// TEST MODE: cambia TEST_MODE a false cuando quieras usar todos los ASINs.
-
-const TEST_MODE = true;
-
-const TEST_ASINS: string[] = [
-  "B078PX4575",
-];
 
 const PROD_ASINS: string[] = [
   "B078PX4575", "B078PQJSRY", "B0792QR5YT", "B01LW6CYEC", "B01LVW4SLP",
@@ -87,4 +80,11 @@ const PROD_ASINS: string[] = [
   "B0FGJ497MW", "B0FGJ5PWPM", "B0GSG783XH", "B0GSGKGB96", "B0DQHRGZGN",
 ];
 
-export const ASINS: string[] = TEST_MODE ? TEST_ASINS : PROD_ASINS;
+// batch: 1 = primera mitad, 2 = segunda mitad, undefined = todos
+export function getAsins(batch?: number): string[] {
+  if (batch === 1) return PROD_ASINS.slice(0, Math.ceil(PROD_ASINS.length / 2));
+  if (batch === 2) return PROD_ASINS.slice(Math.ceil(PROD_ASINS.length / 2));
+  return PROD_ASINS;
+}
+
+export const ASINS = PROD_ASINS;

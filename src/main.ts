@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { ASINS } from "./asins.js";
+import { getAsins } from "./asins.js";
 import { fetchKeepaProducts } from "./keepa-client.js";
 import { fetchCategoryInfo } from "./category-client.js";
 import { fetchSellerNames } from "./seller-client.js";
@@ -37,9 +37,11 @@ async function main() {
   if (!miVendedorId) throw new Error("MI_VENDEDOR_ID is not set");
 
   const supabaseTable = process.env.SUPABASE_TABLE ?? "productos";
+  const batchNum = process.env.BATCH_NUMBER ? parseInt(process.env.BATCH_NUMBER) : undefined;
+  const ASINS = getAsins(batchNum);
 
   console.log(
-    `Iniciando actualización: ${ASINS.length} ASINs × ${COUNTRIES.length} países → tabla: ${supabaseTable}`
+    `Iniciando actualización: batch=${batchNum ?? "todos"} → ${ASINS.length} ASINs × ${COUNTRIES.length} países → tabla: ${supabaseTable}`
   );
 
   // Step 1: Fetch all products from Keepa

@@ -91,7 +91,10 @@
   .product-img { width:52px; height:52px; border-radius:8px; object-fit:contain; background:#f8f9fa; border:1px solid #dde2e8; display:block; }
   .product-img-placeholder { width:52px; height:52px; border-radius:8px; background:#eef1f5; border:1px solid #dde2e8; display:flex; align-items:center; justify-content:center; font-size:20px; }
   .product-name { max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .asin { font-family:monospace; font-size:11px; color:#8a9bb0; margin-top:2px; }
+  .asin { font-family:monospace; font-size:11px; color:#8a9bb0; margin-top:2px; cursor:pointer; display:inline-flex; align-items:center; gap:4px; }
+  .asin:hover { color:#2ecc71; }
+  .asin .copy-icon { opacity:0; font-size:10px; transition:opacity .15s; }
+  .asin:hover .copy-icon { opacity:1; }
 
   .btn-amazon { display:inline-flex; align-items:center; gap:4px; background:rgba(46,204,113,.1); color:#2ecc71; border:1px solid rgba(46,204,113,.25); border-radius:6px; padding:5px 10px; font-size:11px; font-weight:700; font-family:'Syne',sans-serif; text-decoration:none; transition:all .2s; }
   .btn-amazon:hover { background:rgba(46,204,113,.2); }
@@ -258,7 +261,7 @@
   <!-- TABLE -->
   <div id="tableWrap" class="table-wrap">
     <table>
-      <thead>
+      <thead id="tableHead">
         <tr>
           <th class="no-sort" style="width:20px"></th>
           <th class="no-sort" style="width:68px">Foto</th>
@@ -338,7 +341,7 @@ async function loadData() {
     let all = [], from = 0, batchSize = 1000;
     while (true) {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/productos_test?select=*&order=updated_at.desc&limit=${batchSize}&offset=${from}`,
+        `${SUPABASE_URL}/rest/v1/productos?select=*&order=updated_at.desc&limit=${batchSize}&offset=${from}`,
         { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
       );
       const batch = await res.json();
@@ -590,6 +593,19 @@ function sortData() {
 }
 
 // ── RENDER ──
+function asinHtml(asin) {
+  return `<div class="asin" onclick="copyAsin('${asin}',this,event)" title="Clic para copiar">${asin} <span class="copy-icon">⎘</span></div>`;
+}
+
+function copyAsin(asin, el, event) {
+  event.stopPropagation();
+  navigator.clipboard.writeText(asin).then(() => {
+    const orig = el.innerHTML;
+    el.innerHTML = asin + ' <span class="copy-icon" style="opacity:1;color:#2ecc71">✓</span>';
+    setTimeout(() => { el.innerHTML = orig; }, 1200);
+  });
+}
+
 function fmtP(val, cls='price') {
   return val != null ? `<span class="${cls}">${Number(val).toFixed(2)} €</span>` : `<span style="color:#aab4c0">—</span>`;
 }
@@ -632,85 +648,148 @@ function bbPill(r) {
   return `<span class="country-pill nobox">${f} —</span>`;
 }
 
-function renderTable() {
-  const tbody = document.getElementById('tableBody');
-  const start = (currentPage-1) * ROWS_PER_PAGE;
-  const grouped = groupByAsin(filteredData);
-  const page = grouped.slice(start, start+ROWS_PER_PAGE);
+function renderSubRowData(r) {
+  let bbBadge;
+  if (r.tenemos) bbBadge = '<span class="badge win">✓ Zococity</span>';
+  else if (r.hemosPerdido) { const n = r.vendedor.length>22?r.vendedor.slice(0,22)+'…':r.vendedor; bbBadge = '<span class="badge lose" title="'+r.vendedor+'">✗ '+n+'</span>'; }
+  else bbBadge = '<span class="badge nobox">— Sin BB</span>';
 
-  if (!page.length) {
-    tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><h3>No hay resultados</h3><p>Prueba con otros filtros</p></div></td></tr>';
-    return;
+  const cambio = r.precioCambio
+    ? '<span class="price-change '+(r.cambio1d>0?'up':'down')+'">'+(r.cambio1d>0?'▲':'▼')+' '+Math.abs(r.cambio1d).toFixed(1)+'%</span>'
+    : '<span style="color:#aab4c0;font-family:monospace;font-size:12px">—</span>';
+
+  const fbaLabel = r.esFBA ? '<span class="fba-yes">FBA</span>' : '<span class="fba-no">FBM</span>';
+
+  let rankHtml;
+  if (r.rankingSub) {
+    const rankNum = '# ' + Number(r.rankingSub).toLocaleString('es-ES');
+    const topPct  = r.rankingPct != null ? ' · <span style="color:#27ae60;font-weight:600">Top ' + (r.rankingPct < 1 ? r.rankingPct.toFixed(1) : Math.round(r.rankingPct)) + '%</span>' : '';
+    const catName = r.categoriaNombre ? ' · <span style="color:#6b7a8d">' + r.categoriaNombre + '</span>' : '';
+    rankHtml = '<span style="background:rgba(52,152,219,.1);color:#2980b9;border:1px solid rgba(52,152,219,.25);border-radius:6px;padding:3px 8px;font-size:11px;font-family:monospace;white-space:nowrap">' + rankNum + topPct + catName + '</span>';
+  } else {
+    rankHtml = '<span style="color:#aab4c0">—</span>';
   }
 
-  let html = '';
-  page.forEach((g, idx) => {
-    const proxiedUrl = g.imgUrl ? 'https://images.weserv.nl/?url='+encodeURIComponent(g.imgUrl)+'&w=100&h=100&fit=contain&bg=white' : '';
-    const imgHtml = proxiedUrl
-      ? '<img class="product-img" src="'+proxiedUrl+'" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><div class="product-img-placeholder" style="display:none">📦</div>'
-      : '<div class="product-img-placeholder">📦</div>';
+  return { bbBadge, cambio, fbaLabel, rankHtml };
+}
 
-    const pills = g.paises.map(r => bbPill(r)).join('');
+function renderTable() {
+  const tbody  = document.getElementById('tableBody');
+  const thead  = document.getElementById('tableHead');
+  const start  = (currentPage-1) * ROWS_PER_PAGE;
+  const singleCountry = msState.pais.selected.size === 1;
 
-    // Main row
-    html += '<tr class="main-row" onclick="toggleRow('+idx+')" style="cursor:pointer">';
-    html += '<td style="padding-left:14px"><span class="chevron" id="chev'+idx+'">▶</span></td>';
-    html += '<td style="padding:8px 8px 8px 4px"><div style="width:52px;height:52px;position:relative">'+imgHtml+'</div></td>';
-    html += '<td><div class="product-name" title="'+g.titulo+'">'+( g.titulo||'—')+'</div><div class="asin">'+g.asin+'</div></td>';
-    html += '<td style="font-size:12px;color:#6b7a8d">'+(g.marca||'—')+'</td>';
-    html += '<td><div class="country-badges">'+pills+'</div></td>';
-    html += '<td>'+fmtRating(g.rating)+'</td>';
-    html += '<td>'+fmtOferta(g.oferta)+'</td>';
-    html += '</tr>';
+  if (singleCountry) {
+    // ── FLAT MODE: 1 país → todas las columnas directamente visibles ──
+    thead.innerHTML = `<tr>
+      <th class="no-sort" style="width:68px">Foto</th>
+      <th onclick="sortBy('titulo')">Producto</th>
+      <th onclick="sortBy('marca')">Marca</th>
+      <th class="no-sort">Buy Box</th>
+      <th class="no-sort">Precio BB / Mín 30d</th>
+      <th class="no-sort">Cambio</th>
+      <th class="no-sort">FBA</th>
+      <th class="no-sort">Ranking</th>
+      <th onclick="sortBy('rating')">Rating</th>
+      <th onclick="sortBy('oferta')">Oferta</th>
+    </tr>`;
 
-    // Sub header row (hidden by default)
-    html += '<tr class="sub-row sub-header-'+idx+'" style="display:none;background:#eef1f5">';
-    html += '<td></td><td></td>';
-    html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">País</td>';
-    html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Buy Box</td>';
-    html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Precio BB / Mín 30d</td>';
-    html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Cambio</td>';
-    html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">FBA / Amazon</td>';
-      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Ranking</td>';
-    html += '</tr>';
+    const page = filteredData.slice(start, start + ROWS_PER_PAGE);
+    if (!page.length) {
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty"><h3>No hay resultados</h3><p>Prueba con otros filtros</p></div></td></tr>';
+      return;
+    }
 
-    // Sub data rows (hidden by default)
-    g.paises.forEach(r => {
-      let bbBadge;
-      if (r.tenemos) bbBadge = '<span class="badge win">✓ Zococity</span>';
-      else if (r.hemosPerdido) { const n = r.vendedor.length>22?r.vendedor.slice(0,22)+'…':r.vendedor; bbBadge = '<span class="badge lose" title="'+r.vendedor+'">✗ '+n+'</span>'; }
-      else bbBadge = '<span class="badge nobox">— Sin BB</span>';
+    let html = '';
+    page.forEach(r => {
+      const proxiedUrl = r.imgUrl ? 'https://images.weserv.nl/?url='+encodeURIComponent(r.imgUrl)+'&w=100&h=100&fit=contain&bg=white' : '';
+      const imgHtml = proxiedUrl
+        ? '<img class="product-img" src="'+proxiedUrl+'" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><div class="product-img-placeholder" style="display:none">📦</div>'
+        : '<div class="product-img-placeholder">📦</div>';
 
-      const cambio = r.precioCambio
-        ? '<span class="price-change '+(r.cambio1d>0?'up':'down')+'">'+(r.cambio1d>0?'▲':'▼')+' '+Math.abs(r.cambio1d).toFixed(1)+'%</span>'
-        : '<span style="color:#aab4c0;font-family:monospace;font-size:12px">—</span>';
+      const { bbBadge, cambio, fbaLabel, rankHtml } = renderSubRowData(r);
 
-      const nombres = {ES:'España',DE:'Alemania',FR:'Francia',IT:'Italia'};
-
-      html += '<tr class="sub-row sub-data-'+idx+'" style="display:none">';
-      html += '<td></td>';
-      html += '<td><span style="font-size:22px">'+getFlag(r.pais)+'</span></td>';
-      html += '<td style="font-size:12px;color:#6b7a8d">'+(nombres[r.pais]||r.pais)+'</td>';
+      html += '<tr>';
+      html += '<td style="padding:8px 8px 8px 14px"><div style="width:52px;height:52px;position:relative">'+imgHtml+'</div></td>';
+      html += '<td><div class="product-name" title="'+r.titulo+'">'+( r.titulo||'—')+'</div>'+asinHtml(r.asin)+'</td>';
+      html += '<td style="font-size:12px;color:#6b7a8d">'+(r.marca||'—')+'</td>';
       html += '<td>'+bbBadge+'</td>';
       html += '<td>'+fmtP(r.precio)+(r.precioMin!=null?' <span style="font-size:11px;color:#3498db;margin-left:4px">mín '+Number(r.precioMin).toFixed(2)+' €</span>':'')+'</td>';
       html += '<td>'+cambio+'</td>';
-      const fbaLabel = r.esFBA ? '<span class="fba-yes">FBA</span>' : '<span class="fba-no">FBM</span>';
       html += '<td>'+fbaLabel+' <a class="btn-amazon" href="https://www.'+getDomain(r.pais)+'/dp/'+r.asin+'" target="_blank" rel="noopener" style="margin-left:6px">↗ Ver</a></td>';
-      let rankHtml;
-      if (r.rankingSub) {
-        const rankNum = '# ' + Number(r.rankingSub).toLocaleString('es-ES');
-        const topPct  = r.rankingPct != null ? ' · <span style="color:#27ae60;font-weight:600">Top ' + (r.rankingPct < 1 ? r.rankingPct.toFixed(1) : Math.round(r.rankingPct)) + '%</span>' : '';
-        const catName = r.categoriaNombre ? ' · <span style="color:#6b7a8d">' + r.categoriaNombre + '</span>' : '';
-        rankHtml = '<span style="background:rgba(52,152,219,.1);color:#2980b9;border:1px solid rgba(52,152,219,.25);border-radius:6px;padding:3px 8px;font-size:11px;font-family:monospace;white-space:nowrap">' + rankNum + topPct + catName + '</span>';
-      } else {
-        rankHtml = '<span style="color:#aab4c0">—</span>';
-      }
       html += '<td>'+rankHtml+'</td>';
+      html += '<td>'+fmtRating(r.rating)+'</td>';
+      html += '<td>'+fmtOferta(r.oferta)+'</td>';
       html += '</tr>';
     });
-  });
+    tbody.innerHTML = html;
 
-  tbody.innerHTML = html;
+  } else {
+    // ── GROUPED MODE: varios países → agrupado por ASIN con desplegable ──
+    thead.innerHTML = `<tr>
+      <th class="no-sort" style="width:20px"></th>
+      <th class="no-sort" style="width:68px">Foto</th>
+      <th onclick="sortBy('titulo')">Producto</th>
+      <th onclick="sortBy('marca')">Marca</th>
+      <th class="no-sort">Buy Box por país</th>
+      <th onclick="sortBy('rating')">Rating</th>
+      <th onclick="sortBy('oferta')">Oferta</th>
+    </tr>`;
+
+    const grouped = groupByAsin(filteredData);
+    const page = grouped.slice(start, start+ROWS_PER_PAGE);
+
+    if (!page.length) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><h3>No hay resultados</h3><p>Prueba con otros filtros</p></div></td></tr>';
+      return;
+    }
+
+    let html = '';
+    page.forEach((g, idx) => {
+      const proxiedUrl = g.imgUrl ? 'https://images.weserv.nl/?url='+encodeURIComponent(g.imgUrl)+'&w=100&h=100&fit=contain&bg=white' : '';
+      const imgHtml = proxiedUrl
+        ? '<img class="product-img" src="'+proxiedUrl+'" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><div class="product-img-placeholder" style="display:none">📦</div>'
+        : '<div class="product-img-placeholder">📦</div>';
+
+      const pills = g.paises.map(r => bbPill(r)).join('');
+
+      html += '<tr class="main-row" onclick="toggleRow('+idx+')" style="cursor:pointer">';
+      html += '<td style="padding-left:14px"><span class="chevron" id="chev'+idx+'">▶</span></td>';
+      html += '<td style="padding:8px 8px 8px 4px"><div style="width:52px;height:52px;position:relative">'+imgHtml+'</div></td>';
+      html += '<td><div class="product-name" title="'+g.titulo+'">'+( g.titulo||'—')+'</div>'+asinHtml(g.asin)+'</td>';
+      html += '<td style="font-size:12px;color:#6b7a8d">'+(g.marca||'—')+'</td>';
+      html += '<td><div class="country-badges">'+pills+'</div></td>';
+      html += '<td>'+fmtRating(g.rating)+'</td>';
+      html += '<td>'+fmtOferta(g.oferta)+'</td>';
+      html += '</tr>';
+
+      html += '<tr class="sub-row sub-header-'+idx+'" style="display:none;background:#eef1f5">';
+      html += '<td></td><td></td>';
+      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">País</td>';
+      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Buy Box</td>';
+      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Precio BB / Mín 30d</td>';
+      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Cambio</td>';
+      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">FBA / Amazon</td>';
+      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Ranking</td>';
+      html += '</tr>';
+
+      g.paises.forEach(r => {
+        const { bbBadge, cambio, fbaLabel, rankHtml } = renderSubRowData(r);
+        const nombres = {ES:'España',DE:'Alemania',FR:'Francia',IT:'Italia'};
+        html += '<tr class="sub-row sub-data-'+idx+'" style="display:none">';
+        html += '<td></td>';
+        html += '<td><span style="font-size:22px">'+getFlag(r.pais)+'</span></td>';
+        html += '<td style="font-size:12px;color:#6b7a8d">'+(nombres[r.pais]||r.pais)+'</td>';
+        html += '<td>'+bbBadge+'</td>';
+        html += '<td>'+fmtP(r.precio)+(r.precioMin!=null?' <span style="font-size:11px;color:#3498db;margin-left:4px">mín '+Number(r.precioMin).toFixed(2)+' €</span>':'')+'</td>';
+        html += '<td>'+cambio+'</td>';
+        html += '<td>'+fbaLabel+' <a class="btn-amazon" href="https://www.'+getDomain(r.pais)+'/dp/'+r.asin+'" target="_blank" rel="noopener" style="margin-left:6px">↗ Ver</a></td>';
+        html += '<td>'+rankHtml+'</td>';
+        html += '</tr>';
+      });
+    });
+    tbody.innerHTML = html;
+  }
 }
 
 function toggleRow(idx) {
@@ -728,8 +807,10 @@ function toggleRow(idx) {
 }
 
 function renderPagination() {
-  const grouped = groupByAsin(filteredData); const total = grouped.length; const pages = Math.ceil(total / ROWS_PER_PAGE);
-  document.getElementById('pagInfo').textContent = `${total} productos (${filteredData.length} filas) · Página ${currentPage} de ${Math.max(1,pages)}`;
+  const singleCountry = msState.pais.selected.size === 1;
+  const total = singleCountry ? filteredData.length : groupByAsin(filteredData).length;
+  const pages = Math.ceil(total / ROWS_PER_PAGE);
+  document.getElementById('pagInfo').textContent = `${total} productos · Página ${currentPage} de ${Math.max(1,pages)}`;
   let html = `<button class="pag-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>←</button>`;
   const range = [];
   for (let i=1; i<=pages; i++) {

@@ -3,6 +3,103 @@ import type { CategoryInfo } from "./category-client.js";
 
 const BATCH_SIZE = 500;
 
+// Full upsert — all fields including titulo, marca, img_url.
+// Use for products where Keepa returned a non-empty title.
+export async function upsertProductos(
+  productos: ProductoRecord[],
+  supabaseUrl: string,
+  supabaseKey: string,
+  table = "productos"
+): Promise<{ count: number }> {
+  const headers = {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+    "Content-Type": "application/json",
+    Prefer: "return=minimal,resolution=merge-duplicates",
+  };
+
+  let totalCount = 0;
+
+  for (let i = 0; i < productos.length; i += BATCH_SIZE) {
+    const batch = productos.slice(i, i + BATCH_SIZE);
+
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/${table}?on_conflict=asin,pais`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(batch),
+      }
+    );
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `Supabase upsert failed: ${res.status} ${text.slice(0, 300)}`
+      );
+    }
+
+    totalCount += batch.length;
+  }
+
+  return { count: totalCount };
+}
+
+// Partial upsert — only buybox/dynamic fields, never touches titulo, marca, img_url.
+// Use for products where Keepa returned no title, to preserve existing metadata.
+export async function upsertBuyboxOnly(
+  productos: ProductoRecord[],
+  supabaseUrl: string,
+  supabaseKey: string,
+  table = "productos"
+): Promise<void> {
+  const headers = {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+    "Content-Type": "application/json",
+    Prefer: "return=minimal,resolution=merge-duplicates",
+  };
+
+  for (let i = 0; i < productos.length; i += BATCH_SIZE) {
+    const batch = productos.slice(i, i + BATCH_SIZE).map(p => ({
+      asin:                 p.asin,
+      pais:                 p.pais,
+      precio:               p.precio,
+      precio_min:           p.precio_min,
+      cambio_1d:            p.cambio_1d,
+      es_fba:               p.es_fba,
+      vendedor:             p.vendedor,
+      tenemos:              p.tenemos,
+      hay_buybox:           p.hay_buybox,
+      rating:               p.rating,
+      oferta:               p.oferta,
+      ranking_subcategoria: p.ranking_subcategoria,
+      categoria_id:         p.categoria_id,
+      categoria_nombre:     p.categoria_nombre,
+      ranking_pct:          p.ranking_pct,
+      vendedor_nombre:      p.vendedor_nombre,
+      updated_at:           p.updated_at,
+      // titulo, marca, img_url deliberately omitted → DB keeps existing values
+    }));
+
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/${table}?on_conflict=asin,pais`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(batch),
+      }
+    );
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `Supabase buybox-only upsert failed: ${res.status} ${text.slice(0, 300)}`
+      );
+    }
+  }
+}
+
 export async function deleteProductosByAsins(
   asins: string[],
   pais: string,
@@ -53,46 +150,6 @@ export async function deleteProductosByCountry(
       `Supabase delete failed for ${pais}: ${res.status} ${text.slice(0, 300)}`
     );
   }
-}
-
-export async function upsertProductos(
-  productos: ProductoRecord[],
-  supabaseUrl: string,
-  supabaseKey: string,
-  table = "productos"
-): Promise<{ count: number }> {
-  const headers = {
-    apikey: supabaseKey,
-    Authorization: `Bearer ${supabaseKey}`,
-    "Content-Type": "application/json",
-    Prefer: "return=minimal,resolution=merge-duplicates",
-  };
-
-  let totalCount = 0;
-
-  for (let i = 0; i < productos.length; i += BATCH_SIZE) {
-    const batch = productos.slice(i, i + BATCH_SIZE);
-
-    const res = await fetch(
-      `${supabaseUrl}/rest/v1/${table}?on_conflict=asin,pais`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify(batch),
-      }
-    );
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `Supabase upsert failed: ${res.status} ${text.slice(0, 300)}`
-      );
-    }
-
-    totalCount += batch.length;
-  }
-
-  return { count: totalCount };
 }
 
 export async function getCachedCategories(

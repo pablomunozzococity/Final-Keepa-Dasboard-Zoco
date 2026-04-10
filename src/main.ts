@@ -5,7 +5,7 @@ import { fetchCategoryInfo } from "./category-client.js";
 import { fetchSellerNames } from "./seller-client.js";
 import {
   upsertProductos,
-  deleteProductosByAsins,
+  upsertBuyboxOnly,
   getCachedCategories,
   upsertCategorias,
   getCachedSellers,
@@ -192,43 +192,27 @@ async function main() {
     }
   }
 
-  // Step 8: Replace data in Supabase — delete old rows per country, then insert fresh data.
-  // Only replace ASINs where Keepa returned a non-empty title. If Keepa returns an ASIN
-  // without a title (product not indexed yet, or a transient gap), skip it entirely so we
-  // don't wipe the previously-stored good data for that product.
-  const productosConTitulo = allProductos.filter(p => p.titulo.trim() !== "");
-  const sinTitulo = allProductos.length - productosConTitulo.length;
-  if (sinTitulo > 0) {
-    console.log(`  ⚠ ${sinTitulo} productos sin título omitidos (Keepa no tiene datos aún)`);
+  // Step 8: Upsert to Supabase.
+  // Products WITH title → full upsert (all fields including titulo, marca, img_url).
+  // Products WITHOUT title → upsert only buybox fields, preserving any existing
+  //   titulo/marca/img_url in the DB so we never wipe good metadata with empty data.
+  const conTitulo    = allProductos.filter(p => p.titulo.trim() !== "");
+  const sinTituloArr = allProductos.filter(p => p.titulo.trim() === "");
+
+  if (sinTituloArr.length > 0) {
+    console.log(`\n⚠ ${sinTituloArr.length} productos sin título de Keepa — se actualizan solo los campos de buybox`);
   }
 
-  // Build per-country ASIN lists to do a targeted delete (not a full country wipe),
-  // so ASINs skipped above keep their existing rows.
-  type PaisList = Map<string, string[]>;
-  const asinsPorPais: PaisList = new Map();
-  for (const p of productosConTitulo) {
-    if (!asinsPorPais.has(p.pais)) asinsPorPais.set(p.pais, []);
-    asinsPorPais.get(p.pais)!.push(p.asin);
+  console.log(`\nSubiendo ${conTitulo.length} productos completos a Supabase...`);
+  const { count: countFull } = await upsertProductos(conTitulo, supabaseUrl, supabaseKey, supabaseTable);
+
+  if (sinTituloArr.length > 0) {
+    console.log(`Actualizando buybox de ${sinTituloArr.length} productos sin título...`);
+    await upsertBuyboxOnly(sinTituloArr, supabaseUrl, supabaseKey, supabaseTable);
   }
-
-  const paisesActualizados = [...asinsPorPais.keys()];
-  console.log(`\nReemplazando datos en Supabase para: [${paisesActualizados.join(", ")}]`);
-
-  for (const [pais, asins] of asinsPorPais) {
-    console.log(`  Eliminando ${asins.length} filas antiguas de ${pais}...`);
-    await deleteProductosByAsins(asins, pais, supabaseUrl, supabaseKey, supabaseTable);
-  }
-
-  console.log(`  Insertando ${productosConTitulo.length} filas nuevas...`);
-  const { count } = await upsertProductos(
-    productosConTitulo,
-    supabaseUrl,
-    supabaseKey,
-    supabaseTable
-  );
 
   console.log(`\n${"=".repeat(40)}`);
-  console.log(`Total filas insertadas: ${count}`);
+  console.log(`Total filas actualizadas: ${countFull + sinTituloArr.length}`);
   console.log("Completado correctamente.");
 }
 

@@ -16,12 +16,21 @@ type CountryConfig = {
   domain: number; // Keepa domain codes: ES=8, FR=4, IT=10, DE=3
 };
 
-const COUNTRIES: CountryConfig[] = [
+const ALL_COUNTRIES: CountryConfig[] = [
   { code: "ES", domain: 8 },
   { code: "FR", domain: 4 },
   { code: "IT", domain: 10 },
   { code: "DE", domain: 3 },
 ];
+
+// RUN_NUMBER → qué países + qué mitad de ASINs procesar en cada run
+// Diseñado para usar ~1,050 tokens por run (dentro del límite de ~1,200/hora)
+const RUN_CONFIG: Record<number, { countries: string[]; asinBatch: number }> = {
+  1: { countries: ["ES", "FR"], asinBatch: 1 },
+  2: { countries: ["ES", "FR"], asinBatch: 2 },
+  3: { countries: ["IT", "DE"], asinBatch: 1 },
+  4: { countries: ["IT", "DE"], asinBatch: 2 },
+};
 
 async function main() {
   const keepaKey = process.env.KEEPA_API_KEY;
@@ -37,11 +46,16 @@ async function main() {
   if (!miVendedorId) throw new Error("MI_VENDEDOR_ID is not set");
 
   const supabaseTable = process.env.SUPABASE_TABLE ?? "productos";
-  const batchNum = process.env.BATCH_NUMBER ? parseInt(process.env.BATCH_NUMBER) : undefined;
-  const ASINS = getAsins(batchNum);
+  const runNumber = process.env.RUN_NUMBER ? parseInt(process.env.RUN_NUMBER) : undefined;
+
+  const runConfig = runNumber ? RUN_CONFIG[runNumber] : undefined;
+  const COUNTRIES = runConfig
+    ? ALL_COUNTRIES.filter((c) => runConfig.countries.includes(c.code))
+    : ALL_COUNTRIES;
+  const ASINS = getAsins(runConfig?.asinBatch);
 
   console.log(
-    `Iniciando actualización: batch=${batchNum ?? "todos"} → ${ASINS.length} ASINs × ${COUNTRIES.length} países → tabla: ${supabaseTable}`
+    `Iniciando actualización: run=${runNumber ?? "todos"} → ${ASINS.length} ASINs × [${COUNTRIES.map(c => c.code).join(", ")}] → tabla: ${supabaseTable}`
   );
 
   // Step 1: Fetch all products from Keepa
@@ -69,7 +83,7 @@ async function main() {
   const pairs: { catId: number; domain: string; domainNum: number }[] = [];
   for (const p of allProductos) {
     if (p.categoria_id && p.ranking_subcategoria) {
-      const country = COUNTRIES.find((c) => c.code === p.pais);
+      const country = ALL_COUNTRIES.find((c) => c.code === p.pais);
       if (
         country &&
         !pairs.find((x) => x.catId === p.categoria_id && x.domain === p.pais)
@@ -129,7 +143,7 @@ async function main() {
   const sellerDomainMap = new Map<string, number>(); // sellerId → domain number
   for (const p of allProductos) {
     if (p.vendedor && p.vendedor !== "-1") {
-      const country = COUNTRIES.find((c) => c.code === p.pais);
+      const country = ALL_COUNTRIES.find((c) => c.code === p.pais);
       if (country && !sellerDomainMap.has(p.vendedor)) {
         sellerDomainMap.set(p.vendedor, country.domain);
       }

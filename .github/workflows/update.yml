@@ -2,12 +2,14 @@ name: BuyBox Update
 
 on:
   schedule:
-    - cron: "57 0,2,4,6,8,10,12,14,16,18,20,22 * * *"   # batch 1 — :57 horas pares UTC (tokens acumulados al máximo)
-    - cron: "57 1,3,5,7,9,11,13,15,17,19,21,23 * * *"   # batch 2 — :57 horas impares UTC (1h después)
-  workflow_dispatch:        # lanzamiento manual desde GitHub
+    - cron: "57 0,4,8,12,16,20 * * *"   # run 1: ES+FR, mitad 1 — tokens al máximo
+    - cron: "57 1,5,9,13,17,21 * * *"   # run 2: ES+FR, mitad 2
+    - cron: "57 2,6,10,14,18,22 * * *"  # run 3: IT+DE, mitad 1
+    - cron: "57 3,7,11,15,19,23 * * *"  # run 4: IT+DE, mitad 2
+  workflow_dispatch:
     inputs:
-      batch:
-        description: "Batch a ejecutar (1, 2 o vacío para todos)"
+      run_number:
+        description: "Run a ejecutar (1-4 o vacío para todos)"
         required: false
         default: ""
 
@@ -25,15 +27,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Determine batch number
-        id: batch
+      - name: Determine run number
+        id: run
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "number=${{ github.event.inputs.batch }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event.schedule }}" = "57 0,2,4,6,8,10,12,14,16,18,20,22 * * *" ]; then
+            echo "number=${{ github.event.inputs.run_number }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "57 0,4,8,12,16,20 * * *" ]; then
             echo "number=1" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event.schedule }}" = "57 1,3,5,7,9,11,13,15,17,19,21,23 * * *" ]; then
+          elif [ "${{ github.event.schedule }}" = "57 1,5,9,13,17,21 * * *" ]; then
             echo "number=2" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "57 2,6,10,14,18,22 * * *" ]; then
+            echo "number=3" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "57 3,7,11,15,19,23 * * *" ]; then
+            echo "number=4" >> $GITHUB_OUTPUT
           else
             echo "number=" >> $GITHUB_OUTPUT
           fi
@@ -46,4 +52,4 @@ jobs:
           SUPABASE_KEY:     ${{ secrets.SUPABASE_KEY }}
           MI_VENDEDOR_ID:   ${{ secrets.MI_VENDEDOR_ID }}
           SUPABASE_TABLE:   productos
-          BATCH_NUMBER:     ${{ steps.batch.outputs.number }}
+          RUN_NUMBER:       ${{ steps.run.outputs.number }}

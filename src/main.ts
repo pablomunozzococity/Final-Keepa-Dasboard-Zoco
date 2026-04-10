@@ -23,13 +23,12 @@ const ALL_COUNTRIES: CountryConfig[] = [
   { code: "DE", domain: 3 },
 ];
 
-// RUN_NUMBER → qué países + qué mitad de ASINs procesar en cada run
-// Diseñado para usar ~1,050 tokens por run (dentro del límite de ~1,200/hora)
-const RUN_CONFIG: Record<number, { countries: string[]; asinBatch: number }> = {
-  1: { countries: ["ES", "FR"], asinBatch: 1 },
-  2: { countries: ["ES", "FR"], asinBatch: 2 },
-  3: { countries: ["IT", "DE"], asinBatch: 1 },
-  4: { countries: ["IT", "DE"], asinBatch: 2 },
+// RUN_NUMBER → país a procesar en cada run (todos los ASINs, 1 país por hora)
+const RUN_CONFIG: Record<number, string> = {
+  1: "ES",
+  2: "FR",
+  3: "IT",
+  4: "DE",
 };
 
 async function main() {
@@ -47,12 +46,11 @@ async function main() {
 
   const supabaseTable = process.env.SUPABASE_TABLE ?? "productos";
   const runNumber = process.env.RUN_NUMBER ? parseInt(process.env.RUN_NUMBER) : undefined;
-
-  const runConfig = runNumber ? RUN_CONFIG[runNumber] : undefined;
-  const COUNTRIES = runConfig
-    ? ALL_COUNTRIES.filter((c) => runConfig.countries.includes(c.code))
+  const countryCode = runNumber ? RUN_CONFIG[runNumber] : undefined;
+  const COUNTRIES = countryCode
+    ? ALL_COUNTRIES.filter((c) => c.code === countryCode)
     : ALL_COUNTRIES;
-  const ASINS = getAsins(runConfig?.asinBatch);
+  const ASINS = getAsins();
 
   console.log(
     `Iniciando actualización: run=${runNumber ?? "todos"} → ${ASINS.length} ASINs × [${COUNTRIES.map(c => c.code).join(", ")}] → tabla: ${supabaseTable}`

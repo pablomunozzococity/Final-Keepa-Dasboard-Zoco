@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       run_number:
-        description: "Run a ejecutar (1-4 o vacío para todos)"
+        description: "Run a ejecutar: 1=ES, 2=FR, 3=IT, 4=DE, vacío=todos"
         required: false
         default: ""
 

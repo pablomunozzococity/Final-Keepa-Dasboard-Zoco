@@ -1,11 +1,19 @@
 const KEEPA_BASE = "https://api.keepa.com";
 const IMAGE_BASE = "https://m.media-amazon.com/images/I/";
 
+// Keepa csv price type indices (used in stats.current[], stats.min[], stats.atIntervalStart[])
+// 18 = BUY_BOX_SHIPPING: buy box price including shipping (new)
+// 10 = NEW_FBA: lowest new FBA offer price
+const BUY_BOX_IDX = 18;
+
 type KeepaStats = {
   current: (number | null)[];
-  min: (number | null)[];
   atIntervalStart: (number | null)[] | null;
+  min: ([number, number] | null)[];   // 2D: [keepaTime, value]
+  // Direct buybox fields — available when buybox=1 parameter is used
   buyBoxSellerId?: string | null;
+  buyBoxPrice?: number | null;        // buy box price in cents, -1/-2 if none
+  buyBoxShipping?: number | null;     // shipping cost in cents, -1/-2 if none
   buyBoxIsFBA?: boolean | null;
 };
 
@@ -57,11 +65,11 @@ const MAX_REASONABLE_PRICE = 500000; // €5000 — filters Keepa data corruptio
 
 function keepaPrice(raw: number | null | undefined): number | null {
   if (raw == null || raw <= 0) return null;
-  if (raw > MAX_REASONABLE_PRICE) return null; // corrupted data
+  if (raw > MAX_REASONABLE_PRICE) return null;
   return Math.round(raw) / 100;
 }
 
-function calcCambio1d(
+function calcCambio(
   current: number | null | undefined,
   start: number | null | undefined
 ): number | null {
@@ -71,12 +79,10 @@ function calcCambio1d(
 }
 
 function extractImgUrl(imagesCSV: string | undefined, images: KeepaImage[] | undefined, asin: string): string {
-  // Prefer images[] array (Keepa v3 format) — take medium of first image
   if (images && images.length > 0) {
     const code = images[0].m ?? images[0].l;
     if (code) return `${IMAGE_BASE}${code}`;
   }
-  // Fallback: imagesCSV (older format)
   if (imagesCSV) {
     const first = imagesCSV.split(",")[0]?.trim();
     if (first) {
@@ -84,7 +90,6 @@ function extractImgUrl(imagesCSV: string | undefined, images: KeepaImage[] | und
       return `${IMAGE_BASE}${first}`;
     }
   }
-  // Last resort: ASIN-based URL
   return `https://m.media-amazon.com/images/P/${asin}.01._SX300_.jpg`;
 }
 
@@ -125,38 +130,31 @@ function extractCategoriaNombre(
   return categoryTree[categoryTree.length - 1]?.name ?? null;
 }
 
-// BuyBox price indices in order of preference (Keepa csv/stats indices)
-// 18 = BUY_BOX_SHIPPING (buy box incl. shipping), 10 = NEW_FBA (lowest FBA new), 28 = EBAY_NEW_SHIPPING (last resort)
-const BUYBOX_PRICE_INDICES = [28, 18, 10];
-
-function getBuyBoxPrice(arr: (number | null)[]): { raw: number | null; idx: number } {
-  for (const idx of BUYBOX_PRICE_INDICES) {
-    const v = arr[idx];
-    if (v != null && v > 0) return { raw: v, idx };
-  }
-  return { raw: null, idx: -1 };
-}
-
 function mapProduct(
   p: KeepaProduct,
   pais: string,
   miVendedorId: string
 ): ProductoRecord {
-  const { raw: rawPrecio, idx } = getBuyBoxPrice(p.stats.current);
-  const rawMin = idx >= 0 ? (p.stats.min[idx] ?? null) : null;
-  const rawStart = idx >= 0 ? (p.stats.atIntervalStart?.[idx] ?? null) : null;
+  // Use direct buyBoxPrice field (requires buybox=1) — most accurate source
+  const rawPrecio = (p.stats.buyBoxPrice != null && p.stats.buyBoxPrice > 0)
+    ? p.stats.buyBoxPrice
+    : null;
 
-  const precio = keepaPrice(rawPrecio);
+  // min is a 2D array [keepaTime, value] — take index 1 for the actual price value
+  const rawMin = p.stats.min[BUY_BOX_IDX]?.[1] ?? null;
+
+  // atIntervalStart[18] = buy box price at start of the 90-day stats window
+  const rawStart = p.stats.atIntervalStart?.[BUY_BOX_IDX] ?? null;
+
+  const precio    = keepaPrice(rawPrecio);
   const precio_min = keepaPrice(rawMin);
-  const cambio_1d = calcCambio1d(rawPrecio, rawStart);
+  const cambio_1d  = calcCambio(rawPrecio, rawStart);
 
-  // hay_buybox: true if there's a known BuyBox seller (even if price is missing)
   const buyBoxSellerId = p.stats.buyBoxSellerId;
   const hay_buybox = !!(buyBoxSellerId && buyBoxSellerId !== "-1") || precio !== null;
   const tenemos = hay_buybox && buyBoxSellerId === miVendedorId;
 
-  const rating =
-    typeof p.rating === "number" && p.rating > 0 ? p.rating / 10 : null;
+  const rating = typeof p.rating === "number" && p.rating > 0 ? p.rating / 10 : null;
 
   let oferta: string | null = null;
   if (p.promotions && p.promotions.length > 0) {
@@ -223,7 +221,7 @@ async function fetchWithRetry(
   throw new Error("fetchWithRetry: unreachable");
 }
 
-const MIN_TOKENS_THRESHOLD = 100; // stop before a batch if fewer tokens remain
+const MIN_TOKENS_THRESHOLD = 100;
 
 export type FetchResult = {
   records: ProductoRecord[];

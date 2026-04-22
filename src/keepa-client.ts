@@ -9,11 +9,14 @@ type KeepaStats = {
   buyBoxIsFBA?: boolean | null;
 };
 
+type KeepaImage = { m?: string; l?: string };
+
 type KeepaProduct = {
   asin: string;
   title?: string;
   brand?: string;
   imagesCSV?: string;
+  images?: KeepaImage[];
   rating?: number;
   promotions?: unknown[] | null;
   salesRanks?: Record<string, number[]> | null;
@@ -67,7 +70,13 @@ function calcCambio1d(
   return Math.round(((current - start) / start) * 10000) / 100;
 }
 
-function extractImgUrl(imagesCSV: string | undefined, asin: string): string {
+function extractImgUrl(imagesCSV: string | undefined, images: KeepaImage[] | undefined, asin: string): string {
+  // Prefer images[] array (Keepa v3 format) — take medium of first image
+  if (images && images.length > 0) {
+    const code = images[0].m ?? images[0].l;
+    if (code) return `${IMAGE_BASE}${code}`;
+  }
+  // Fallback: imagesCSV (older format)
   if (imagesCSV) {
     const first = imagesCSV.split(",")[0]?.trim();
     if (first) {
@@ -75,6 +84,7 @@ function extractImgUrl(imagesCSV: string | undefined, asin: string): string {
       return `${IMAGE_BASE}${first}`;
     }
   }
+  // Last resort: ASIN-based URL
   return `https://m.media-amazon.com/images/P/${asin}.01._SX300_.jpg`;
 }
 
@@ -170,7 +180,7 @@ function mapProduct(
     cambio_1d,
     es_fba: p.stats.buyBoxIsFBA ?? null,
     vendedor: buyBoxSellerId && buyBoxSellerId !== "-1" ? buyBoxSellerId : null,
-    img_url: extractImgUrl(p.imagesCSV, p.asin),
+    img_url: extractImgUrl(p.imagesCSV, p.images, p.asin),
     tenemos,
     hay_buybox,
     rating,

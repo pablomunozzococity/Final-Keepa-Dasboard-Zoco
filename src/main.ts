@@ -18,9 +18,9 @@ type CountryConfig = {
 };
 
 const ALL_COUNTRIES: CountryConfig[] = [
-  { code: "ES", domain: 8 },
+  { code: "ES", domain: 9 },
   { code: "FR", domain: 4 },
-  { code: "IT", domain: 10 },
+  { code: "IT", domain: 8 },
   { code: "DE", domain: 3 },
 ];
 

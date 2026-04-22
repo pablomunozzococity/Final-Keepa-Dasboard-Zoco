@@ -1,5 +1,5 @@
 const KEEPA_BASE = "https://api.keepa.com";
-const IMAGE_BASE = "https://images-na.ssl-images-amazon.com/images/I/";
+const IMAGE_BASE = "https://m.media-amazon.com/images/I/";
 
 type KeepaStats = {
   current: (number | null)[];
@@ -125,8 +125,8 @@ function extractCategoriaNombre(
   return categoryTree[categoryTree.length - 1]?.name ?? null;
 }
 
-// BuyBox price indices in order of preference (Keepa CSV format with buybox=1)
-// 28 = BuyBox New (FBA), 18 = BuyBox (FBM), 10 = BuyBox fallback
+// BuyBox price indices in order of preference (Keepa csv/stats indices)
+// 18 = BUY_BOX_SHIPPING (buy box incl. shipping), 10 = NEW_FBA (lowest FBA new), 28 = EBAY_NEW_SHIPPING (last resort)
 const BUYBOX_PRICE_INDICES = [28, 18, 10];
 
 function getBuyBoxPrice(arr: (number | null)[]): { raw: number | null; idx: number } {

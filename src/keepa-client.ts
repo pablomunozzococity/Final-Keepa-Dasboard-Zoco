@@ -37,7 +37,7 @@ export type ProductoRecord = {
   precio_min: number | null;
   cambio_1d: number | null;
   es_fba: boolean | null;
-  img_url: string | null;
+  img_url: string;
   tenemos: boolean;
   hay_buybox: boolean;
   rating: number | null;
@@ -67,12 +67,15 @@ function calcCambio1d(
   return Math.round(((current - start) / start) * 10000) / 100;
 }
 
-function extractImgUrl(imagesCSV: string | undefined): string | null {
-  if (!imagesCSV) return null;
-  const first = imagesCSV.split(",")[0]?.trim();
-  if (!first) return null;
-  if (first.startsWith("http")) return first;
-  return `${IMAGE_BASE}${first}`;
+function extractImgUrl(imagesCSV: string | undefined, asin: string): string {
+  if (imagesCSV) {
+    const first = imagesCSV.split(",")[0]?.trim();
+    if (first) {
+      if (first.startsWith("http")) return first;
+      return `${IMAGE_BASE}${first}`;
+    }
+  }
+  return `https://m.media-amazon.com/images/P/${asin}.01._SX300_.jpg`;
 }
 
 function extractRanking(
@@ -167,7 +170,7 @@ function mapProduct(
     cambio_1d,
     es_fba: p.stats.buyBoxIsFBA ?? null,
     vendedor: buyBoxSellerId && buyBoxSellerId !== "-1" ? buyBoxSellerId : null,
-    img_url: extractImgUrl(p.imagesCSV),
+    img_url: extractImgUrl(p.imagesCSV, p.asin),
     tenemos,
     hay_buybox,
     rating,

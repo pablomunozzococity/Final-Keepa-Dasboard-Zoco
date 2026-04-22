@@ -362,7 +362,7 @@ async function loadData() {
       precioMin:  r.precio_min,
       cambio1d:   r.cambio_1d || 0,
       esFBA:      r.es_fba === null ? null : Boolean(r.es_fba),
-      imgUrl:     r.img_url || '',
+      imgUrl:     r.img_url || ('https://m.media-amazon.com/images/P/' + r.asin + '.01._SX300_.jpg'),
       tenemos:    r.tenemos,
       hayBuyBox:  r.hay_buybox,
       hemosPerdido: r.hay_buybox && !r.tenemos && !!r.vendedor,

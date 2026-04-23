@@ -33,8 +33,8 @@ type KeepaProduct = {
   brand?: string;
   imagesCSV?: string;
   images?: KeepaImage[];
-  // csv[8] = LIGHTNING_DEAL price, csv[16] = RATING (×10), csv[17] = COUNT_REVIEWS
-  // csv[8] and csv[16] require &rating=1 (and csv[8] is naturally populated when relevant)
+  // csv[4] = LIGHTNING_DEAL price, csv[16] = RATING (×10), csv[17] = COUNT_REVIEWS
+  // csv[16]/csv[17] require &rating=1. csv[4] is populated in standard requests.
   csv?: (number[] | null)[];
   promotions?: KeepaPromotion[] | null;
   salesRanks?: Record<string, number[]> | null;
@@ -176,11 +176,11 @@ function mapProduct(
 
   const rating = extractRating(p.csv);
 
-  // Deal badge: Lightning Deal (csv[8] last value > 0) or active promotion with type code
+  // Deal badge: Lightning Deal (csv[4] last value > 0) or active promotion with type code
   // Keepa promotion type codes: 2=Lightning Deal, 4=Deal of the Day, 8=Prime Exclusive,
   // 16=Prime Day, 32=Black Friday/Cyber Monday. Type 1=coupon (excluded — not a badge deal).
   let oferta: string | null = null;
-  const lightningArr = p.csv?.[8];
+  const lightningArr = p.csv?.[4];
   if (lightningArr && lightningArr.length >= 2 && lightningArr[lightningArr.length - 1] > 0) {
     oferta = "Oferta flash";
   } else if (p.promotions && p.promotions.length > 0) {

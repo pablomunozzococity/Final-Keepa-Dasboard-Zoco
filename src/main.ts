@@ -14,7 +14,7 @@ import {
 
 type CountryConfig = {
   code: string;
-  domain: number; // Keepa domain codes: ES=8, FR=4, IT=10, DE=3
+  domain: number; // Keepa domain codes: ES=9, FR=4, IT=8, DE=3
 };
 
 const ALL_COUNTRIES: CountryConfig[] = [

@@ -671,7 +671,7 @@ function renderSubRowData(r) {
   if (r.rankingSub) {
     const rankNum = '# ' + Number(r.rankingSub).toLocaleString('es-ES');
     const topPct  = r.rankingPct != null ? ' · <span style="color:#27ae60;font-weight:600">Top ' + (r.rankingPct < 1 ? r.rankingPct.toFixed(1) : Math.round(r.rankingPct)) + '%</span>' : '';
-    const catName = r.categoriaNombre ? ' · <span style="color:#6b7a8d">' + r.categoriaNombre + '</span>' : '';
+    const catName = r.categoriaNombre && !/^\d+$/.test(r.categoriaNombre) ? ' · <span style="color:#6b7a8d">' + r.categoriaNombre + '</span>' : '';
     rankHtml = '<span style="background:rgba(52,152,219,.1);color:#2980b9;border:1px solid rgba(52,152,219,.25);border-radius:6px;padding:3px 8px;font-size:11px;font-family:monospace;white-space:nowrap">' + rankNum + topPct + catName + '</span>';
   } else {
     rankHtml = '<span style="color:#aab4c0">—</span>';
@@ -773,8 +773,7 @@ function renderTable() {
       html += '</tr>';
 
       html += '<tr class="sub-row sub-header-'+idx+'" style="display:none;background:#eef1f5">';
-      html += '<td></td><td></td>';
-      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">País</td>';
+      html += '<td colspan="2"></td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Buy Box</td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Precio BB / Mín 30d</td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Cambio</td>';
@@ -786,9 +785,7 @@ function renderTable() {
         const { bbBadge, cambio, fbaLabel, rankHtml } = renderSubRowData(r);
         const nombres = {ES:'España',DE:'Alemania',FR:'Francia',IT:'Italia'};
         html += '<tr class="sub-row sub-data-'+idx+'" style="display:none">';
-        html += '<td></td>';
-        html += '<td><span style="font-size:22px">'+getFlag(r.pais)+'</span></td>';
-        html += '<td style="font-size:12px;color:#6b7a8d">'+(nombres[r.pais]||r.pais)+'</td>';
+        html += '<td colspan="2" style="font-size:12px;color:#6b7a8d"><span style="font-size:20px">'+getFlag(r.pais)+'</span> '+(nombres[r.pais]||r.pais)+'</td>';
         html += '<td>'+bbBadge+'</td>';
         html += '<td>'+fmtP(r.precio)+(r.precioMin!=null?' <span style="font-size:11px;color:#3498db;margin-left:4px">mín '+Number(r.precioMin).toFixed(2)+' €</span>':'')+'</td>';
         html += '<td>'+cambio+'</td>';
@@ -835,7 +832,9 @@ function renderPagination() {
 }
 
 function goPage(p) {
-  const pages = Math.ceil(filteredData.length / ROWS_PER_PAGE);
+  const singleCountry = msState.pais.selected.size === 1;
+  const total = singleCountry ? filteredData.length : groupByAsin(filteredData).length;
+  const pages = Math.ceil(total / ROWS_PER_PAGE);
   if (p<1||p>pages) return;
   currentPage=p; renderTable(); renderPagination();
   window.scrollTo({top:0,behavior:'smooth'});

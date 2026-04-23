@@ -73,6 +73,16 @@ export type ProductoRecord = {
 
 const MAX_REASONABLE_PRICE = 500000; // €5000 — filters Keepa data corruption
 
+const DEAL_LABELS_BY_PAIS: Record<string, Record<number, string>> = {
+  ES: { 2: "Oferta flash",  4: "Oferta del día",     8: "Prime Exclusive", 16: "Prime Day", 32: "Black Friday" },
+  FR: { 2: "Vente flash",   4: "Offre du jour",       8: "Prime Exclusive", 16: "Prime Day", 32: "Black Friday" },
+  IT: { 2: "Offerta lampo", 4: "Offerta del giorno",  8: "Prime Exclusive", 16: "Prime Day", 32: "Black Friday" },
+  DE: { 2: "Blitzangebot",  4: "Tagesangebot",        8: "Prime Exclusive", 16: "Prime Day", 32: "Black Friday" },
+};
+const OFERTA_ACTIVA: Record<string, string> = {
+  ES: "Oferta activa", FR: "Offre active", IT: "Offerta attiva", DE: "Aktives Angebot",
+};
+
 function keepaPrice(raw: number | null | undefined): number | null {
   if (raw == null || raw <= 0) return null;
   if (raw > MAX_REASONABLE_PRICE) return null;
@@ -179,21 +189,15 @@ function mapProduct(
   // Deal badge: Lightning Deal (csv[4] last value > 0) or active promotion with type code
   // Keepa promotion type codes: 2=Lightning Deal, 4=Deal of the Day, 8=Prime Exclusive,
   // 16=Prime Day, 32=Black Friday/Cyber Monday. Type 1=coupon (excluded — not a badge deal).
+  const dealLabels = DEAL_LABELS_BY_PAIS[pais] ?? DEAL_LABELS_BY_PAIS.ES;
   let oferta: string | null = null;
   const lightningArr = p.csv?.[4];
   if (lightningArr && lightningArr.length >= 2 && lightningArr[lightningArr.length - 1] > 0) {
-    oferta = "Oferta flash";
+    oferta = dealLabels[2] ?? "Vente flash";
   } else if (p.promotions && p.promotions.length > 0) {
-    const DEAL_LABELS: Record<number, string> = {
-      2: "Oferta flash",
-      4: "Oferta del día",
-      8: "Prime Exclusive",
-      16: "Prime Day",
-      32: "Black Friday",
-    };
     const promo = p.promotions.find(pr => pr.type != null && pr.type !== 1);
     if (promo?.type != null) {
-      oferta = DEAL_LABELS[promo.type] ?? "Oferta activa";
+      oferta = dealLabels[promo.type] ?? (OFERTA_ACTIVA[pais] ?? "Oferta activa");
     }
   }
 

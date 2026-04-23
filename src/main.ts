@@ -12,6 +12,7 @@ import {
   getCachedSellers,
   upsertVendedores,
   getAsinsWithTitulo,
+  deleteProductosByAsins,
 } from "./supabase-client.js";
 
 type CountryConfig = {
@@ -233,15 +234,25 @@ async function main() {
       byPais.get(p.pais)!.push(p);
     }
     const toUpdate: typeof sinTituloArr = [];
+    const toDelete = new Map<string, string[]>(); // pais → asins to purge
     for (const [pais, prods] of byPais) {
       const existing = await getAsinsWithTitulo(prods.map(p => p.asin), pais, supabaseUrl, supabaseKey, supabaseTable);
       for (const p of prods) {
-        if (existing.has(p.asin)) toUpdate.push(p);
+        if (existing.has(p.asin)) {
+          toUpdate.push(p);
+        } else {
+          if (!toDelete.has(pais)) toDelete.set(pais, []);
+          toDelete.get(pais)!.push(p.asin);
+        }
       }
+    }
+    // Delete skeleton rows created by previous runs for ASINs with no marketplace listing
+    for (const [pais, asins] of toDelete) {
+      await deleteProductosByAsins(asins, pais, supabaseUrl, supabaseKey, supabaseTable);
     }
     const skipped = sinTituloArr.length - toUpdate.length;
     if (skipped > 0) {
-      console.log(`\nℹ ${skipped} productos sin título y sin fila previa — ignorados (no existen en este mercado)`);
+      console.log(`\nℹ ${skipped} sin listing en este mercado — filas vacías eliminadas de la BD`);
     }
     if (toUpdate.length > 0) {
       console.log(`\n⚠ ${toUpdate.length} productos sin título de Keepa — actualizando solo buybox en filas existentes`);

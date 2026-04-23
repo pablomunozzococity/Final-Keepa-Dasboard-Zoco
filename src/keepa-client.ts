@@ -25,8 +25,9 @@ type KeepaProduct = {
   brand?: string;
   imagesCSV?: string;
   images?: KeepaImage[];
-  rating?: number;
-  promotions?: unknown[] | null;
+  // csv[16] = RATING history (value × 10), csv[17] = COUNT_REVIEWS — requires &rating=1
+  csv?: (number[] | null)[];
+  coupon?: { badgeText?: string[]; lastSeen?: number } | null;
   salesRanks?: Record<string, number[]> | null;
   salesRankReference?: number | null;
   categoryTree?: { catId: number; name: string }[] | null;
@@ -93,6 +94,16 @@ function extractImgUrl(imagesCSV: string | undefined, images: KeepaImage[] | und
   return `https://m.media-amazon.com/images/P/${asin}.01._SX300_.jpg`;
 }
 
+// csv[16] = RATING history (flat pairs: [keepaTime, value, ...])
+// Keepa stores rating × 10, e.g. 4.7 stars → 47. Requires &rating=1 in the request.
+function extractRating(csv: (number[] | null)[] | null | undefined): number | null {
+  if (!csv) return null;
+  const arr = csv[16];
+  if (!arr || arr.length < 2) return null;
+  const raw = arr[arr.length - 1]; // last value in the time-value flat array
+  return raw != null && raw > 0 ? raw / 10 : null;
+}
+
 function extractRanking(
   salesRanks: Record<string, number[]> | null | undefined,
   salesRankReference: number | null | undefined
@@ -154,14 +165,16 @@ function mapProduct(
   const hay_buybox = !!(buyBoxSellerId && buyBoxSellerId !== "-1") || precio !== null;
   const tenemos = hay_buybox && buyBoxSellerId === miVendedorId;
 
-  const rating = typeof p.rating === "number" && p.rating > 0 ? p.rating / 10 : null;
+  const rating = extractRating(p.csv);
 
+  // Coupon badge text from Amazon (e.g. "Ahorra 10%", "Consigue 2,00 € de descuento")
   let oferta: string | null = null;
-  if (p.promotions && p.promotions.length > 0) {
-    try {
-      oferta = JSON.stringify(p.promotions[0]).slice(0, 200);
-    } catch {
-      oferta = null;
+  if (p.coupon) {
+    const badge = p.coupon.badgeText;
+    if (badge && badge.length > 0) {
+      oferta = badge[0];
+    } else {
+      oferta = "Cupón activo";
     }
   }
 
@@ -256,7 +269,8 @@ export async function fetchKeepaProducts(
       `&domain=${domain}` +
       `&asin=${asinParam}` +
       `&stats=90` +
-      `&buybox=1`;
+      `&buybox=1` +
+      `&rating=1`;
 
     console.log(
       `  [${pais}] batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.length} ASINs (tokens disponibles: ${tokensLeft === Infinity ? "?" : tokensLeft})`

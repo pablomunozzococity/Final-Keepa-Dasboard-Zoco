@@ -68,9 +68,18 @@ async function main() {
     const found = [...ratingMap.values()].filter(v => v !== null).length;
     console.log(`  Ratings obtenidos: ${found}/${ASINS.length}`);
     for (const country of targetCountries) {
-      const rows = ASINS.map(asin => ({ asin, pais: country.code, rating: ratingMap.get(asin) ?? null }));
+      // Only write ratings for ASINs that already have a product row with titulo.
+      // Avoids creating skeleton rows for countries without BuyBox data yet.
+      const existing = await getAsinsWithTitulo(ASINS, country.code, supabaseUrl, supabaseKey, supabaseTable);
+      if (existing.size === 0) {
+        console.log(`  ${country.code}: sin filas de producto — saltado`);
+        continue;
+      }
+      const rows = ASINS
+        .filter(asin => existing.has(asin))
+        .map(asin => ({ asin, pais: country.code, rating: ratingMap.get(asin) ?? null }));
       await upsertRatings(rows, supabaseUrl, supabaseKey, supabaseTable);
-      console.log(`  ${country.code}: ratings guardados`);
+      console.log(`  ${country.code}: ${rows.length} ratings guardados`);
     }
     console.log("\nRatings completados.");
     return;

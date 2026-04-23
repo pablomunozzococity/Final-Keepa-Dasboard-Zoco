@@ -192,9 +192,16 @@ function mapProduct(
   const dealLabels = DEAL_LABELS_BY_PAIS[pais] ?? DEAL_LABELS_BY_PAIS.ES;
   let oferta: string | null = null;
   const lightningArr = p.csv?.[4];
-  if (lightningArr && lightningArr.length >= 2 && lightningArr[lightningArr.length - 1] > 0) {
-    oferta = dealLabels[2] ?? "Vente flash";
-  } else if (p.promotions && p.promotions.length > 0) {
+  if (lightningArr && lightningArr.length >= 2) {
+    const lastPrice    = lightningArr[lightningArr.length - 1];
+    const lastKeepaTs  = lightningArr[lightningArr.length - 2];
+    // Keepa timestamps = Unix minutes − 21 564 000 (epoch 2011-01-01 UTC)
+    const nowKeepa = Math.floor(Date.now() / 60000) - 21564000;
+    if (lastPrice > 0 && (nowKeepa - lastKeepaTs) < 2880) { // active within 48 h
+      oferta = dealLabels[2] ?? "Vente flash";
+    }
+  }
+  if (!oferta && p.promotions && p.promotions.length > 0) {
     const promo = p.promotions.find(pr => pr.type != null && pr.type !== 1);
     if (promo?.type != null) {
       oferta = dealLabels[promo.type] ?? (OFERTA_ACTIVA[pais] ?? "Oferta activa");

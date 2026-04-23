@@ -79,12 +79,11 @@ async function main() {
 
       if (result.stoppedEarly) {
         console.warn(
-          `  ${country.code}: run parcial (${result.records.length} productos) por tokens insuficientes — omitiendo reemplazo para no dejar datos incompletos`
+          `  ${country.code}: run parcial (${result.records.length}/${ASINS.length} productos) por tokens insuficientes — guardando lo obtenido, el resto conserva datos anteriores`
         );
-        continue;
+      } else {
+        console.log(`  ${country.code}: ${result.records.length} productos obtenidos`);
       }
-
-      console.log(`  ${country.code}: ${result.records.length} productos obtenidos`);
       allProductos.push(...result.records);
     } catch (err) {
       console.error(

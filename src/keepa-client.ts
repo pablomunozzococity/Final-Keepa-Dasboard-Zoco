@@ -287,7 +287,6 @@ export async function fetchKeepaProducts(
       `?key=${keepaKey}` +
       `&domain=${domain}` +
       `&asin=${asinParam}` +
-      `&stats=90` +
       `&buybox=1`;
 
     console.log(

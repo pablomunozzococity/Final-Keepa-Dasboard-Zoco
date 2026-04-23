@@ -21,7 +21,9 @@ export async function upsertProductos(
   let totalCount = 0;
 
   for (let i = 0; i < productos.length; i += BATCH_SIZE) {
-    const batch = productos.slice(i, i + BATCH_SIZE);
+    // Exclude `rating` — ratings are managed exclusively by upsertRatings.
+    // Sending rating:null here would wipe ratings set by the separate ratings run.
+    const batch = productos.slice(i, i + BATCH_SIZE).map(({ rating: _r, ...rest }) => rest);
 
     const res = await fetch(
       `${supabaseUrl}/rest/v1/${table}?on_conflict=asin,pais`,
@@ -71,7 +73,7 @@ export async function upsertBuyboxOnly(
       vendedor:             p.vendedor,
       tenemos:              p.tenemos,
       hay_buybox:           p.hay_buybox,
-      rating:               p.rating,
+      // rating omitted — managed exclusively by upsertRatings
       oferta:               p.oferta,
       ranking_subcategoria: p.ranking_subcategoria,
       categoria_id:         p.categoria_id,

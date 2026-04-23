@@ -19,15 +19,24 @@ type KeepaStats = {
 
 type KeepaImage = { m?: string; l?: string };
 
+type KeepaPromotion = {
+  type?: number;       // deal type code from Keepa
+  freeShipping?: boolean;
+  percentageOff?: number;
+  fixedOff?: number;
+  eligibleMembershipPrograms?: number[];
+};
+
 type KeepaProduct = {
   asin: string;
   title?: string;
   brand?: string;
   imagesCSV?: string;
   images?: KeepaImage[];
-  // csv[16] = RATING history (value × 10), csv[17] = COUNT_REVIEWS — requires &rating=1
+  // csv[8] = LIGHTNING_DEAL price, csv[16] = RATING (×10), csv[17] = COUNT_REVIEWS
+  // csv[8] and csv[16] require &rating=1 (and csv[8] is naturally populated when relevant)
   csv?: (number[] | null)[];
-  coupon?: { badgeText?: string[]; lastSeen?: number } | null;
+  promotions?: KeepaPromotion[] | null;
   salesRanks?: Record<string, number[]> | null;
   salesRankReference?: number | null;
   categoryTree?: { catId: number; name: string }[] | null;
@@ -167,14 +176,24 @@ function mapProduct(
 
   const rating = extractRating(p.csv);
 
-  // Coupon badge text from Amazon (e.g. "Ahorra 10%", "Consigue 2,00 € de descuento")
+  // Deal badge: Lightning Deal (csv[8] last value > 0) or active promotion with type code
+  // Keepa promotion type codes: 2=Lightning Deal, 4=Deal of the Day, 8=Prime Exclusive,
+  // 16=Prime Day, 32=Black Friday/Cyber Monday. Type 1=coupon (excluded — not a badge deal).
   let oferta: string | null = null;
-  if (p.coupon) {
-    const badge = p.coupon.badgeText;
-    if (badge && badge.length > 0) {
-      oferta = badge[0];
-    } else {
-      oferta = "Cupón activo";
+  const lightningArr = p.csv?.[8];
+  if (lightningArr && lightningArr.length >= 2 && lightningArr[lightningArr.length - 1] > 0) {
+    oferta = "Oferta flash";
+  } else if (p.promotions && p.promotions.length > 0) {
+    const DEAL_LABELS: Record<number, string> = {
+      2: "Oferta flash",
+      4: "Oferta del día",
+      8: "Prime Exclusive",
+      16: "Prime Day",
+      32: "Black Friday",
+    };
+    const promo = p.promotions.find(pr => pr.type != null && pr.type !== 1);
+    if (promo?.type != null) {
+      oferta = DEAL_LABELS[promo.type] ?? "Oferta activa";
     }
   }
 

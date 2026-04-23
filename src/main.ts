@@ -55,15 +55,18 @@ async function main() {
     : ALL_COUNTRIES;
   const ASINS = getAsins();
 
-  // ── RATINGS MODE: only update the rating column, no buybox/stats fetch ──────
+  // ── RATINGS MODE: rating is product-level (same across all marketplaces).
+  // Fetch once from ES domain, write to all 4 countries. ~150 tokens total.
   if (runMode === "ratings") {
-    console.log(`Modo ratings: ${ASINS.length} ASINs × [${COUNTRIES.map(c => c.code).join(", ")}]`);
-    for (const country of COUNTRIES) {
-      console.log(`\n=== ${country.code} ratings ===`);
-      const ratingMap = await fetchKeepaRatings(ASINS, country.domain, country.code, keepaKey);
+    const esDomain = ALL_COUNTRIES.find(c => c.code === "ES")!;
+    console.log(`Modo ratings: ${ASINS.length} ASINs (fetch desde ES → aplica a todos los países)`);
+    const ratingMap = await fetchKeepaRatings(ASINS, esDomain.domain, "ES", keepaKey);
+    const found = [...ratingMap.values()].filter(v => v !== null).length;
+    console.log(`  Ratings obtenidos: ${found}/${ASINS.length}`);
+    for (const country of ALL_COUNTRIES) {
       const rows = ASINS.map(asin => ({ asin, pais: country.code, rating: ratingMap.get(asin) ?? null }));
       await upsertRatings(rows, supabaseUrl, supabaseKey, supabaseTable);
-      console.log(`  ${country.code}: ${[...ratingMap.values()].filter(v => v !== null).length}/${ASINS.length} ratings guardados`);
+      console.log(`  ${country.code}: ratings guardados`);
     }
     console.log("\nRatings completados.");
     return;

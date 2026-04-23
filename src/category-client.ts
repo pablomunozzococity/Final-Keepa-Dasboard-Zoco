@@ -3,6 +3,7 @@ const KEEPA_BASE = "https://api.keepa.com";
 type KeepaCategoryObject = {
   catId: number;
   name: string;
+  productCount?: number;
   highestRank?: number;
 };
 
@@ -44,7 +45,7 @@ export async function fetchCategoryInfo(
       catId,
       domain: domainCode,
       nombre: cat.name,
-      total: cat.highestRank ?? 0,
+      total: cat.productCount ?? cat.highestRank ?? 0,
     };
   } catch (err) {
     console.warn(`  Category fetch failed for catId ${catId}:`, err);

@@ -1,11 +1,6 @@
 name: BuyBox Update
 
 on:
-  schedule:
-    - cron: "57 0,4,8,12,16,20 * * *"   # run 1: ES — todos los ASINs
-    - cron: "57 1,5,9,13,17,21 * * *"   # run 2: FR — todos los ASINs
-    - cron: "57 2,6,10,14,18,22 * * *"  # run 3: IT — todos los ASINs
-    - cron: "57 3,7,11,15,19,23 * * *"  # run 4: DE — todos los ASINs
   workflow_dispatch:
     inputs:
       run_number:
@@ -30,19 +25,7 @@ jobs:
       - name: Determine run number
         id: run
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "number=${{ github.event.inputs.run_number }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event.schedule }}" = "57 0,4,8,12,16,20 * * *" ]; then
-            echo "number=1" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event.schedule }}" = "57 1,5,9,13,17,21 * * *" ]; then
-            echo "number=2" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event.schedule }}" = "57 2,6,10,14,18,22 * * *" ]; then
-            echo "number=3" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event.schedule }}" = "57 3,7,11,15,19,23 * * *" ]; then
-            echo "number=4" >> $GITHUB_OUTPUT
-          else
-            echo "number=" >> $GITHUB_OUTPUT
-          fi
+          echo "number=${{ github.event.inputs.run_number }}" >> $GITHUB_OUTPUT
 
       - name: Run BuyBox update
         run: npm start

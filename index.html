@@ -779,6 +779,7 @@ function renderTable() {
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Cambio</td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">FBA / Amazon</td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Ranking</td>';
+      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Oferta</td>';
       html += '</tr>';
 
       g.paises.forEach(r => {
@@ -791,6 +792,7 @@ function renderTable() {
         html += '<td>'+cambio+'</td>';
         html += '<td>'+fbaLabel+' <a class="btn-amazon" href="https://www.'+getDomain(r.pais)+'/dp/'+r.asin+'" target="_blank" rel="noopener" style="margin-left:6px">↗ Ver</a></td>';
         html += '<td>'+rankHtml+'</td>';
+        html += '<td>'+fmtOferta(r.oferta)+'</td>';
         html += '</tr>';
       });
     });

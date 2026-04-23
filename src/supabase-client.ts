@@ -295,3 +295,32 @@ export async function upsertVendedores(
     console.warn(`Seller cache upsert warning: ${res.status} ${text.slice(0, 200)}`);
   }
 }
+
+// Partial upsert — updates only the rating column, preserving all other fields.
+export async function upsertRatings(
+  ratings: { asin: string; pais: string; rating: number | null }[],
+  supabaseUrl: string,
+  supabaseKey: string,
+  table = "productos"
+): Promise<void> {
+  if (ratings.length === 0) return;
+
+  const headers = {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+    "Content-Type": "application/json",
+    Prefer: "return=minimal,resolution=merge-duplicates",
+  };
+
+  for (let i = 0; i < ratings.length; i += BATCH_SIZE) {
+    const batch = ratings.slice(i, i + BATCH_SIZE);
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/${table}?on_conflict=asin,pais`,
+      { method: "POST", headers, body: JSON.stringify(batch) }
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Supabase ratings upsert failed: ${res.status} ${text.slice(0, 300)}`);
+    }
+  }
+}

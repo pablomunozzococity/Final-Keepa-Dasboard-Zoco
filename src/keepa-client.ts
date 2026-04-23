@@ -288,8 +288,7 @@ export async function fetchKeepaProducts(
       `&domain=${domain}` +
       `&asin=${asinParam}` +
       `&stats=90` +
-      `&buybox=1` +
-      `&rating=1`;
+      `&buybox=1`;
 
     console.log(
       `  [${pais}] batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.length} ASINs (tokens disponibles: ${tokensLeft === Infinity ? "?" : tokensLeft})`
@@ -308,4 +307,42 @@ export async function fetchKeepaProducts(
   }
 
   return { records, tokensLeft, stoppedEarly: false };
+}
+
+// Fetches only ratings (csv[16]) using &rating=1 without stats/buybox.
+// Much cheaper token profile — use in a separate run to avoid exhausting the budget.
+export async function fetchKeepaRatings(
+  asins: string[],
+  domain: number,
+  pais: string,
+  keepaKey: string
+): Promise<Map<string, number | null>> {
+  const BATCH_SIZE = 100;
+  const ratings = new Map<string, number | null>();
+  let tokensLeft = Infinity;
+
+  for (let i = 0; i < asins.length; i += BATCH_SIZE) {
+    if (tokensLeft < MIN_TOKENS_THRESHOLD) {
+      console.warn(`  [${pais}] ratings ⚠ Solo quedan ${tokensLeft} tokens — deteniendo`);
+      break;
+    }
+    const batch = asins.slice(i, i + BATCH_SIZE);
+    const url =
+      `${KEEPA_BASE}/product` +
+      `?key=${keepaKey}` +
+      `&domain=${domain}` +
+      `&asin=${batch.join(",")}` +
+      `&rating=1`;
+
+    console.log(`  [${pais}] ratings batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.length} ASINs`);
+    const data = await fetchWithRetry(url);
+    tokensLeft = data.tokensLeft;
+    console.log(`  [${pais}] ratings batch ${Math.floor(i / BATCH_SIZE) + 1}: tokens restantes: ${tokensLeft}`);
+
+    for (const p of data.products ?? []) {
+      ratings.set(p.asin, extractRating(p.csv));
+    }
+  }
+
+  return ratings;
 }

@@ -1,11 +1,12 @@
 import "dotenv/config";
 import { getAsins } from "./asins.js";
-import { fetchKeepaProducts } from "./keepa-client.js";
+import { fetchKeepaProducts, fetchKeepaRatings } from "./keepa-client.js";
 import { fetchCategoryInfo } from "./category-client.js";
 import { fetchSellerNames } from "./seller-client.js";
 import {
   upsertProductos,
   upsertBuyboxOnly,
+  upsertRatings,
   getCachedCategories,
   upsertCategorias,
   getCachedSellers,
@@ -46,12 +47,27 @@ async function main() {
   if (!miVendedorId) throw new Error("MI_VENDEDOR_ID is not set");
 
   const supabaseTable = process.env.SUPABASE_TABLE ?? "productos";
-  const runNumber = process.env.RUN_NUMBER ? parseInt(process.env.RUN_NUMBER) : undefined;
+  const runMode    = process.env.RUN_MODE ?? "buybox"; // "buybox" | "ratings"
+  const runNumber  = process.env.RUN_NUMBER ? parseInt(process.env.RUN_NUMBER) : undefined;
   const countryCode = runNumber ? RUN_CONFIG[runNumber] : undefined;
   const COUNTRIES = countryCode
     ? ALL_COUNTRIES.filter((c) => c.code === countryCode)
     : ALL_COUNTRIES;
   const ASINS = getAsins();
+
+  // ── RATINGS MODE: only update the rating column, no buybox/stats fetch ──────
+  if (runMode === "ratings") {
+    console.log(`Modo ratings: ${ASINS.length} ASINs × [${COUNTRIES.map(c => c.code).join(", ")}]`);
+    for (const country of COUNTRIES) {
+      console.log(`\n=== ${country.code} ratings ===`);
+      const ratingMap = await fetchKeepaRatings(ASINS, country.domain, country.code, keepaKey);
+      const rows = ASINS.map(asin => ({ asin, pais: country.code, rating: ratingMap.get(asin) ?? null }));
+      await upsertRatings(rows, supabaseUrl, supabaseKey, supabaseTable);
+      console.log(`  ${country.code}: ${[...ratingMap.values()].filter(v => v !== null).length}/${ASINS.length} ratings guardados`);
+    }
+    console.log("\nRatings completados.");
+    return;
+  }
 
   console.log(
     `Iniciando actualización: run=${runNumber ?? "todos"} → ${ASINS.length} ASINs × [${COUNTRIES.map(c => c.code).join(", ")}] → tabla: ${supabaseTable}`

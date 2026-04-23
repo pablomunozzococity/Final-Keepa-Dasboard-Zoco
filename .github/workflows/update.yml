@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       run_number:
-        description: "Run a ejecutar: 1=ES, 2=FR, 3=IT, 4=DE, vacío=todos"
+        description: "País: 1=ES, 2=FR, 3=IT, 4=DE, vacío=todos"
         required: false
         default: ""
+      run_mode:
+        description: "Modo: buybox (precios/buybox, ~500 tokens) | ratings (solo estrellas, ~600 tokens)"
+        required: false
+        default: "buybox"
 
 jobs:
   update:
@@ -36,3 +40,4 @@ jobs:
           MI_VENDEDOR_ID:   ${{ secrets.MI_VENDEDOR_ID }}
           SUPABASE_TABLE:   productos
           RUN_NUMBER:       ${{ steps.run.outputs.number }}
+          RUN_MODE:         ${{ github.event.inputs.run_mode }}

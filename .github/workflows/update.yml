@@ -8,7 +8,7 @@ on:
         required: false
         default: ""
       run_mode:
-        description: "Modo: buybox (precios/buybox, ~500 tokens) | ratings (estrellas 1x/día todos los países, ~150 tokens)"
+        description: "Modo: buybox (~500 tokens) | ratings (~150 tokens, RUN_NUMBER elige países o vacío=todos)"
         required: false
         default: "buybox"
 

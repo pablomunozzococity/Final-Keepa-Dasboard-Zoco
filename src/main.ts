@@ -56,14 +56,16 @@ async function main() {
   const ASINS = getAsins();
 
   // ── RATINGS MODE: rating is product-level (same across all marketplaces).
-  // Fetch once from ES domain, write to all 4 countries. ~150 tokens total.
+  // Fetch once from ES domain, write to the selected countries. ~150 tokens total.
+  // RUN_NUMBER selects which countries to write to (empty = all).
   if (runMode === "ratings") {
     const esDomain = ALL_COUNTRIES.find(c => c.code === "ES")!;
-    console.log(`Modo ratings: ${ASINS.length} ASINs (fetch desde ES → aplica a todos los países)`);
+    const targetCountries = COUNTRIES; // respects RUN_NUMBER
+    console.log(`Modo ratings: ${ASINS.length} ASINs (fetch desde ES → escribe a [${targetCountries.map(c => c.code).join(", ")}])`);
     const ratingMap = await fetchKeepaRatings(ASINS, esDomain.domain, "ES", keepaKey);
     const found = [...ratingMap.values()].filter(v => v !== null).length;
     console.log(`  Ratings obtenidos: ${found}/${ASINS.length}`);
-    for (const country of ALL_COUNTRIES) {
+    for (const country of targetCountries) {
       const rows = ASINS.map(asin => ({ asin, pais: country.code, rating: ratingMap.get(asin) ?? null }));
       await upsertRatings(rows, supabaseUrl, supabaseKey, supabaseTable);
       console.log(`  ${country.code}: ratings guardados`);

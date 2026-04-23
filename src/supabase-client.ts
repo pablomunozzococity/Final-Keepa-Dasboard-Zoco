@@ -298,6 +298,27 @@ export async function upsertVendedores(
   }
 }
 
+// Returns the set of ASINs that already have a row with a non-null titulo for the given country.
+// Used to skip skeleton-row creation in upsertBuyboxOnly.
+export async function getAsinsWithTitulo(
+  asins: string[],
+  pais: string,
+  supabaseUrl: string,
+  supabaseKey: string,
+  table = "productos"
+): Promise<Set<string>> {
+  if (asins.length === 0) return new Set();
+  const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+  const asinList = asins.map(a => `"${a}"`).join(",");
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/${table}?select=asin&pais=eq.${pais}&asin=in.(${asinList})&titulo=not.is.null`,
+    { headers }
+  );
+  if (!res.ok) return new Set();
+  const rows = await res.json() as { asin: string }[];
+  return new Set(rows.map(r => r.asin));
+}
+
 // Partial upsert — updates only the rating column, preserving all other fields.
 export async function upsertRatings(
   ratings: { asin: string; pais: string; rating: number | null }[],

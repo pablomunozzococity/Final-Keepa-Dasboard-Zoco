@@ -11,6 +11,7 @@ import {
   upsertCategorias,
   getCachedSellers,
   upsertVendedores,
+  getAsinsWithTitulo,
 } from "./supabase-client.js";
 
 type CountryConfig = {
@@ -214,25 +215,43 @@ async function main() {
 
   // Step 8: Upsert to Supabase.
   // Products WITH title → full upsert (all fields including titulo, marca, img_url).
-  // Products WITHOUT title → upsert only buybox fields, preserving any existing
-  //   titulo/marca/img_url in the DB so we never wipe good metadata with empty data.
+  // Products WITHOUT title → update only buybox fields, but ONLY for rows that already
+  //   have a titulo in the DB. This prevents creating skeleton rows for ASINs that do
+  //   not exist in a given marketplace (Keepa returns them with no title).
   const conTitulo    = allProductos.filter(p => p.titulo.trim() !== "");
   const sinTituloArr = allProductos.filter(p => p.titulo.trim() === "");
-
-  if (sinTituloArr.length > 0) {
-    console.log(`\n⚠ ${sinTituloArr.length} productos sin título de Keepa — se actualizan solo los campos de buybox`);
-  }
 
   console.log(`\nSubiendo ${conTitulo.length} productos completos a Supabase...`);
   const { count: countFull } = await upsertProductos(conTitulo, supabaseUrl, supabaseKey, supabaseTable);
 
+  let countPartial = 0;
   if (sinTituloArr.length > 0) {
-    console.log(`Actualizando buybox de ${sinTituloArr.length} productos sin título...`);
-    await upsertBuyboxOnly(sinTituloArr, supabaseUrl, supabaseKey, supabaseTable);
+    // Group by country, then check which ASINs already have a row with a titulo.
+    const byPais = new Map<string, typeof sinTituloArr>();
+    for (const p of sinTituloArr) {
+      if (!byPais.has(p.pais)) byPais.set(p.pais, []);
+      byPais.get(p.pais)!.push(p);
+    }
+    const toUpdate: typeof sinTituloArr = [];
+    for (const [pais, prods] of byPais) {
+      const existing = await getAsinsWithTitulo(prods.map(p => p.asin), pais, supabaseUrl, supabaseKey, supabaseTable);
+      for (const p of prods) {
+        if (existing.has(p.asin)) toUpdate.push(p);
+      }
+    }
+    const skipped = sinTituloArr.length - toUpdate.length;
+    if (skipped > 0) {
+      console.log(`\nℹ ${skipped} productos sin título y sin fila previa — ignorados (no existen en este mercado)`);
+    }
+    if (toUpdate.length > 0) {
+      console.log(`\n⚠ ${toUpdate.length} productos sin título de Keepa — actualizando solo buybox en filas existentes`);
+      await upsertBuyboxOnly(toUpdate, supabaseUrl, supabaseKey, supabaseTable);
+      countPartial = toUpdate.length;
+    }
   }
 
   console.log(`\n${"=".repeat(40)}`);
-  console.log(`Total filas actualizadas: ${countFull + sinTituloArr.length}`);
+  console.log(`Total filas actualizadas: ${countFull + countPartial}`);
   console.log("Completado correctamente.");
 }
 

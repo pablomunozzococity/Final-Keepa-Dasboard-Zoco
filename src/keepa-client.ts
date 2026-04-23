@@ -40,7 +40,7 @@ type KeepaProduct = {
   salesRanks?: Record<string, number[]> | null;
   salesRankReference?: number | null;
   categoryTree?: { catId: number; name: string }[] | null;
-  stats: KeepaStats;
+  stats?: KeepaStats;
 };
 
 type KeepaResponse = {
@@ -156,21 +156,21 @@ function mapProduct(
   miVendedorId: string
 ): ProductoRecord {
   // Use direct buyBoxPrice field (requires buybox=1) — most accurate source
-  const rawPrecio = (p.stats.buyBoxPrice != null && p.stats.buyBoxPrice > 0)
-    ? p.stats.buyBoxPrice
+  const rawPrecio = (p.stats?.buyBoxPrice != null && p.stats?.buyBoxPrice > 0)
+    ? p.stats?.buyBoxPrice
     : null;
 
   // min is a 2D array [keepaTime, value] — take index 1 for the actual price value
-  const rawMin = p.stats.min[BUY_BOX_IDX]?.[1] ?? null;
+  const rawMin = p.stats?.min?.[BUY_BOX_IDX]?.[1] ?? null;
 
   // atIntervalStart[18] = buy box price at start of the 90-day stats window
-  const rawStart = p.stats.atIntervalStart?.[BUY_BOX_IDX] ?? null;
+  const rawStart = p.stats?.atIntervalStart?.[BUY_BOX_IDX] ?? null;
 
   const precio    = keepaPrice(rawPrecio);
   const precio_min = keepaPrice(rawMin);
   const cambio_1d  = calcCambio(rawPrecio, rawStart);
 
-  const buyBoxSellerId = p.stats.buyBoxSellerId;
+  const buyBoxSellerId = p.stats?.buyBoxSellerId;
   const hay_buybox = !!(buyBoxSellerId && buyBoxSellerId !== "-1") || precio !== null;
   const tenemos = hay_buybox && buyBoxSellerId === miVendedorId;
 
@@ -208,7 +208,7 @@ function mapProduct(
     precio,
     precio_min,
     cambio_1d,
-    es_fba: p.stats.buyBoxIsFBA ?? null,
+    es_fba: p.stats?.buyBoxIsFBA ?? null,
     vendedor: buyBoxSellerId && buyBoxSellerId !== "-1" ? buyBoxSellerId : null,
     img_url: extractImgUrl(p.imagesCSV, p.images, p.asin),
     tenemos,

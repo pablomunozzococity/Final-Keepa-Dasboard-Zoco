@@ -347,3 +347,40 @@ export async function upsertRatings(
     }
   }
 }
+
+// Deletes every row from the given table. Used to start fresh before a single-ASIN test.
+export async function clearAllProductos(url: string, key: string, table: string): Promise<void> {
+  const res = await fetch(`${url}/rest/v1/${table}?asin=not.is.null`, {
+    method: "DELETE",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, Prefer: "return=minimal" },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`clearAllProductos failed: ${res.status} ${body.slice(0, 200)}`);
+  }
+}
+
+// Reads the current batch number from the batch_state table (defaults to 1 if not found).
+export async function getBatchState(url: string, key: string): Promise<number> {
+  const res = await fetch(
+    `${url}/rest/v1/batch_state?key=eq.current_batch&select=value`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+  );
+  if (!res.ok) return 1;
+  const rows = await res.json() as { value: number }[];
+  return rows?.[0]?.value ?? 1;
+}
+
+// Saves the current batch number to the batch_state table.
+export async function setBatchState(value: number, url: string, key: string): Promise<void> {
+  await fetch(`${url}/rest/v1/batch_state?key=eq.current_batch`, {
+    method: "PATCH",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ value, updated_at: new Date().toISOString() }),
+  });
+}

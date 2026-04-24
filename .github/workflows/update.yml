@@ -1,16 +1,22 @@
 name: BuyBox Update
 
 on:
+  schedule:
+    - cron: '*/30 * * * *'   # cada 30 minutos — procesa 50 ASINs × 4 países por lote
   workflow_dispatch:
     inputs:
-      run_number:
-        description: "País: 1=ES, 2=FR, 3=IT, 4=DE, vacío=todos"
+      asins_override:
+        description: "ASINs fijos (ej: B09XHLYYGB,B09XHPNMCW) — vacío usa rotación automática"
         required: false
         default: ""
-      run_mode:
-        description: "Modo: buybox (~500 tokens) | ratings (~150 tokens, RUN_NUMBER elige países o vacío=todos)"
+      batch_size:
+        description: "Productos por lote en rotación automática (default: 50)"
         required: false
-        default: "buybox"
+        default: "50"
+      clear_table:
+        description: "Borrar toda la tabla antes de cargar (true/false)"
+        required: false
+        default: "false"
 
 jobs:
   update:
@@ -26,11 +32,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Determine run number
-        id: run
-        run: |
-          echo "number=${{ github.event.inputs.run_number }}" >> $GITHUB_OUTPUT
-
       - name: Run BuyBox update
         run: npm start
         env:
@@ -39,5 +40,6 @@ jobs:
           SUPABASE_KEY:     ${{ secrets.SUPABASE_KEY }}
           MI_VENDEDOR_ID:   ${{ secrets.MI_VENDEDOR_ID }}
           SUPABASE_TABLE:   productos
-          RUN_NUMBER:       ${{ steps.run.outputs.number }}
-          RUN_MODE:         ${{ github.event.inputs.run_mode }}
+          ASINS_OVERRIDE:   ${{ github.event.inputs.asins_override }}
+          BATCH_SIZE:       ${{ github.event.inputs.batch_size || '50' }}
+          CLEAR_TABLE:      ${{ github.event.inputs.clear_table || 'false' }}

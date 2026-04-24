@@ -88,3 +88,15 @@ export function getAsins(batch?: number): string[] {
 }
 
 export const ASINS = PROD_ASINS;
+
+// Number of 50-product batches needed to cover all ASINs (385 / 50 = 8)
+export const TOTAL_BATCHES = Math.ceil(PROD_ASINS.length / 50);
+
+// Returns up to batchSize ASINs for the given 1-indexed batch number.
+// Wraps around automatically: batch 9 → batch 1, etc.
+export function getAsinBatch(batchNum: number, batchSize = 50): string[] {
+  const total = Math.ceil(PROD_ASINS.length / batchSize);
+  const adjusted = ((batchNum - 1) % total + total) % total;
+  const start = adjusted * batchSize;
+  return PROD_ASINS.slice(start, start + batchSize);
+}

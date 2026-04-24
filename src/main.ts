@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { getAsins } from "./asins.js";
+import { getAsinBatch, TOTAL_BATCHES } from "./asins.js";
 import { fetchKeepaProducts, fetchKeepaRatings } from "./keepa-client.js";
 import { fetchCategoryInfo } from "./category-client.js";
 import { fetchSellerNames } from "./seller-client.js";
@@ -13,6 +13,9 @@ import {
   upsertVendedores,
   getAsinsWithTitulo,
   deleteProductosByAsins,
+  clearAllProductos,
+  getBatchState,
+  setBatchState,
 } from "./supabase-client.js";
 
 type CountryConfig = {
@@ -55,7 +58,30 @@ async function main() {
   const COUNTRIES = countryCode
     ? ALL_COUNTRIES.filter((c) => c.code === countryCode)
     : ALL_COUNTRIES;
-  const ASINS = getAsins();
+
+  // CLEAR_TABLE=true → wipe all rows before loading (for clean single-ASIN tests)
+  if (process.env.CLEAR_TABLE === "true") {
+    console.log(`Borrando toda la tabla ${supabaseTable}...`);
+    await clearAllProductos(supabaseUrl, supabaseKey, supabaseTable);
+    console.log("Tabla limpia.\n");
+  }
+
+  // ASINS_OVERRIDE → fixed list (test/debug). Otherwise: auto batch rotation.
+  const asinsOverride = process.env.ASINS_OVERRIDE;
+  const batchSize = parseInt(process.env.BATCH_SIZE ?? "50");
+  let currentBatch: number | null = null;
+  let ASINS: string[];
+
+  if (asinsOverride) {
+    ASINS = asinsOverride.split(",").map(a => a.trim()).filter(Boolean);
+    console.log(`Modo override: ${ASINS.length} ASINs fijos`);
+  } else {
+    currentBatch = await getBatchState(supabaseUrl, supabaseKey);
+    ASINS = getAsinBatch(currentBatch, batchSize);
+    const from = (currentBatch - 1) * batchSize + 1;
+    const to = Math.min(currentBatch * batchSize, 385);
+    console.log(`Lote ${currentBatch}/${TOTAL_BATCHES}: ASINs ${from}–${to} (${ASINS.length} productos)`);
+  }
 
   // ── RATINGS MODE: rating is product-level (same across all marketplaces).
   // Fetch once from ES domain, write to the selected countries. ~150 tokens total.
@@ -272,6 +298,14 @@ async function main() {
 
   console.log(`\n${"=".repeat(40)}`);
   console.log(`Total filas actualizadas: ${countFull + countPartial}`);
+
+  // Advance to next batch (only in auto-rotation mode, not in override/test mode)
+  if (currentBatch !== null) {
+    const nextBatch = (currentBatch % TOTAL_BATCHES) + 1;
+    await setBatchState(nextBatch, supabaseUrl, supabaseKey);
+    console.log(`Próximo lote: ${nextBatch}/${TOTAL_BATCHES}`);
+  }
+
   console.log("Completado correctamente.");
 }
 

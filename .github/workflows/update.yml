@@ -1,8 +1,8 @@
 name: BuyBox Update
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'   # cada 30 minutos — procesa 50 ASINs × 4 países por lote
+  # schedule:
+  #   - cron: '*/30 * * * *'   # cada 30 minutos — descomentar cuando esté listo para producción
   workflow_dispatch:
     inputs:
       asins_override:

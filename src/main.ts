@@ -256,25 +256,19 @@ async function main() {
     }
   }
 
-  // Step 7b: Fetch ratings — cascade ES→DE→FR→IT until every ASIN has a value.
-  // Amazon EU ratings are shared across marketplaces; Keepa may only track them in
-  // some domains, so we try each until we find a non-null rating.
-  console.log(`\nFetching ratings para ${ASINS.length} ASINs...`);
-  const ratingMap = await fetchKeepaRatings(ASINS, 9, "ES", keepaKey);
-  for (const [domain, code] of [[3,"DE"],[4,"FR"],[8,"IT"]] as [number,string][]) {
-    const missing = ASINS.filter(asin => (ratingMap.get(asin) ?? null) == null);
-    if (missing.length === 0) break;
-    console.log(`  ${missing.length} sin rating en ES → reintentando en ${code}...`);
-    const fallback = await fetchKeepaRatings(missing, domain, code, keepaKey);
-    for (const [asin, rating] of fallback) {
-      if (rating != null) ratingMap.set(asin, rating);
+  // Step 7b: Fetch ratings per domain — ratings differ by marketplace on Keepa.
+  console.log(`\nFetching ratings por dominio...`);
+  for (const country of COUNTRIES) {
+    const domainRows = allProductos.filter(p => p.pais === country.code);
+    if (domainRows.length === 0) continue;
+    const domainAsins = [...new Set(domainRows.map(p => p.asin))];
+    const ratingMap = await fetchKeepaRatings(domainAsins, country.domain, country.code, keepaKey);
+    let found = 0;
+    for (const p of domainRows) {
+      const r = ratingMap.get(p.asin);
+      if (r != null) { p.rating = r; found++; }
     }
-  }
-  const ratedCount = [...ratingMap.values()].filter(v => v !== null).length;
-  console.log(`  Ratings: ${ratedCount}/${ASINS.length} encontrados`);
-  for (const p of allProductos) {
-    const r = ratingMap.get(p.asin);
-    if (r != null) p.rating = r;
+    console.log(`  ${country.code}: ${found}/${domainAsins.length} ratings`);
   }
 
   // Step 8: Upsert to Supabase.

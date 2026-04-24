@@ -114,6 +114,8 @@
   .rating-stars { color:#f39c12; font-size:13px; }
   .rating-val   { font-family:monospace; font-size:12px; color:#6b7a8d; margin-left:4px; }
   .badge-oferta { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; background:rgba(243,156,18,0.12); color:#d68910; border:1px solid rgba(243,156,18,0.3); white-space:nowrap; }
+  .fav-star { background:none; border:none; cursor:pointer; font-size:13px; padding:0 0 0 5px; color:#dde2e8; line-height:1; vertical-align:middle; transition:color .15s; }
+  .fav-star.on { color:#f1c40f; }
 
   /* ── PAGINATION ── */
   .pagination { display:flex; align-items:center; justify-content:space-between; padding:16px 40px; border-top:1px solid #dde2e8; font-size:13px; color:#6b7a8d; }
@@ -256,6 +258,7 @@
     </div>
 
     <input type="text" id="searchInput" placeholder="Buscar producto o ASIN..." oninput="applyFilters()">
+    <button class="filter-btn" id="btnFav" onclick="setFilter('fav')">★ Favoritos</button>
   </div>
 
   <!-- TABLE -->
@@ -301,6 +304,8 @@ const ROWS_PER_PAGE = 50;
 let allData = [], filteredData = [], currentPage = 1;
 let currentSort = { col:null, dir:1 };
 const activeFilters = new Set(); // empty = show all
+const favorites = new Set(JSON.parse(localStorage.getItem('buybox_favorites') || '[]'));
+function saveFavorites() { localStorage.setItem('buybox_favorites', JSON.stringify([...favorites])); }
 
 // ── LOGIN ──
 function doLogin() {
@@ -517,8 +522,8 @@ function setFilter(f) {
   }
   // Actualizar botones
   document.getElementById('btnAll').classList.toggle('active', activeFilters.size === 0);
-  ['win','lose','changed','fba','fbm'].forEach(k => {
-    const btn = document.getElementById({win:'btnWin',lose:'btnLose',changed:'btnChanged',fba:'btnFBA',fbm:'btnFBM'}[k]);
+  ['win','lose','changed','fba','fbm','fav'].forEach(k => {
+    const btn = document.getElementById({win:'btnWin',lose:'btnLose',changed:'btnChanged',fba:'btnFBA',fbm:'btnFBM',fav:'btnFav'}[k]);
     if (btn) btn.classList.toggle('active', activeFilters.has(k));
   });
   applyFilters();
@@ -532,6 +537,7 @@ function applyFilters() {
     if (selPaises.size > 0 && !selPaises.has(r.pais))  return false;
     if (selMarcas.size > 0 && !selMarcas.has(r.marca)) return false;
     if (search && !r.titulo.toLowerCase().includes(search) && !r.asin.toLowerCase().includes(search)) return false;
+    if (activeFilters.has('fav') && !favorites.has(r.asin)) return false;
     if (activeFilters.size > 0) {
       // Grupo buybox: win / lose / changed
       const hasBBFilter = activeFilters.has('win') || activeFilters.has('lose') || activeFilters.has('changed');
@@ -594,7 +600,15 @@ function sortData() {
 
 // ── RENDER ──
 function asinHtml(asin) {
-  return `<div class="asin" onclick="copyAsin('${asin}',this,event)" title="Clic para copiar">${asin} <span class="copy-icon">⎘</span></div>`;
+  const on = favorites.has(asin) ? ' on' : '';
+  return `<div class="asin" onclick="copyAsin('${asin}',this,event)" title="Clic para copiar">${asin} <span class="copy-icon">⎘</span><button class="fav-star${on}" onclick="toggleFav('${asin}',this,event)" title="Marcar favorito">★</button></div>`;
+}
+function toggleFav(asin, btn, event) {
+  event.stopPropagation();
+  if (favorites.has(asin)) { favorites.delete(asin); btn.classList.remove('on'); }
+  else { favorites.add(asin); btn.classList.add('on'); }
+  saveFavorites();
+  if (activeFilters.has('fav')) applyFilters();
 }
 
 function copyAsin(asin, el, event) {

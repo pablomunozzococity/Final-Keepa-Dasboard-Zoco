@@ -776,7 +776,9 @@ function renderTable() {
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Buy Box</td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Precio BB / Mín 30d</td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Cambio</td>';
-      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">FBA / Ranking / Oferta</td>';
+      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">FBA / Amazon</td>';
+      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Ranking</td>';
+      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Oferta</td>';
       html += '</tr>';
 
       g.paises.forEach(r => {
@@ -788,7 +790,9 @@ function renderTable() {
         html += '<td>'+bbBadge+'</td>';
         html += '<td>'+fmtP(r.precio)+(r.precioMin!=null?' <span style="font-size:11px;color:#3498db;margin-left:4px">mín '+Number(r.precioMin).toFixed(2)+' €</span>':'')+'</td>';
         html += '<td>'+cambio+'</td>';
-        html += '<td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+fbaLabel+'<a class="btn-amazon" href="https://www.'+getDomain(r.pais)+'/dp/'+r.asin+'" target="_blank" rel="noopener">↗ Ver</a>'+rankHtml+ofertaHtml+'</div></td>';
+        html += '<td>'+fbaLabel+' <a class="btn-amazon" href="https://www.'+getDomain(r.pais)+'/dp/'+r.asin+'" target="_blank" rel="noopener" style="margin-left:4px">↗ Ver</a></td>';
+        html += '<td>'+rankHtml+'</td>';
+        html += '<td>'+fmtOferta(r.oferta)+'</td>';
         html += '</tr>';
       });
     });

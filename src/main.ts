@@ -91,6 +91,13 @@ async function main() {
     const targetCountries = COUNTRIES; // respects RUN_NUMBER
     console.log(`Modo ratings: ${ASINS.length} ASINs (fetch desde ES → escribe a [${targetCountries.map(c => c.code).join(", ")}])`);
     const ratingMap = await fetchKeepaRatings(ASINS, esDomain.domain, "ES", keepaKey);
+    for (const [domain, code] of [[3,"DE"],[4,"FR"],[8,"IT"]] as [number,string][]) {
+      const missing = ASINS.filter(asin => (ratingMap.get(asin) ?? null) == null);
+      if (missing.length === 0) break;
+      console.log(`  ${missing.length} sin rating en ES → reintentando en ${code}...`);
+      const fallback = await fetchKeepaRatings(missing, domain, code, keepaKey);
+      for (const [asin, rating] of fallback) { if (rating != null) ratingMap.set(asin, rating); }
+    }
     const found = [...ratingMap.values()].filter(v => v !== null).length;
     console.log(`  Ratings obtenidos: ${found}/${ASINS.length}`);
     for (const country of targetCountries) {
@@ -249,9 +256,20 @@ async function main() {
     }
   }
 
-  // Step 7b: Fetch ratings once from ES domain (ratings are product-level, same across all markets)
+  // Step 7b: Fetch ratings — cascade ES→DE→FR→IT until every ASIN has a value.
+  // Amazon EU ratings are shared across marketplaces; Keepa may only track them in
+  // some domains, so we try each until we find a non-null rating.
   console.log(`\nFetching ratings para ${ASINS.length} ASINs...`);
   const ratingMap = await fetchKeepaRatings(ASINS, 9, "ES", keepaKey);
+  for (const [domain, code] of [[3,"DE"],[4,"FR"],[8,"IT"]] as [number,string][]) {
+    const missing = ASINS.filter(asin => (ratingMap.get(asin) ?? null) == null);
+    if (missing.length === 0) break;
+    console.log(`  ${missing.length} sin rating en ES → reintentando en ${code}...`);
+    const fallback = await fetchKeepaRatings(missing, domain, code, keepaKey);
+    for (const [asin, rating] of fallback) {
+      if (rating != null) ratingMap.set(asin, rating);
+    }
+  }
   const ratedCount = [...ratingMap.values()].filter(v => v !== null).length;
   console.log(`  Ratings: ${ratedCount}/${ASINS.length} encontrados`);
   for (const p of allProductos) {

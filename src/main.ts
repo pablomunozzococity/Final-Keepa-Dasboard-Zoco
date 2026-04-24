@@ -83,34 +83,23 @@ async function main() {
     console.log(`Lote ${currentBatch}/${TOTAL_BATCHES}: ASINs ${from}–${to} (${ASINS.length} productos)`);
   }
 
-  // ── RATINGS MODE: rating is product-level (same across all marketplaces).
-  // Fetch once from ES domain, write to the selected countries. ~150 tokens total.
-  // RUN_NUMBER selects which countries to write to (empty = all).
+  // ── RATINGS MODE: fetch and write per-domain ratings (ratings differ by marketplace on Keepa).
+  // RUN_NUMBER selects which countries to process (empty = all).
   if (runMode === "ratings") {
-    const esDomain = ALL_COUNTRIES.find(c => c.code === "ES")!;
-    const targetCountries = COUNTRIES; // respects RUN_NUMBER
-    console.log(`Modo ratings: ${ASINS.length} ASINs (fetch desde ES → escribe a [${targetCountries.map(c => c.code).join(", ")}])`);
-    const ratingMap = await fetchKeepaRatings(ASINS, esDomain.domain, "ES", keepaKey);
-    for (const [domain, code] of [[3,"DE"],[4,"FR"],[8,"IT"]] as [number,string][]) {
-      const missing = ASINS.filter(asin => (ratingMap.get(asin) ?? null) == null);
-      if (missing.length === 0) break;
-      console.log(`  ${missing.length} sin rating en ES → reintentando en ${code}...`);
-      const fallback = await fetchKeepaRatings(missing, domain, code, keepaKey);
-      for (const [asin, rating] of fallback) { if (rating != null) ratingMap.set(asin, rating); }
-    }
-    const found = [...ratingMap.values()].filter(v => v !== null).length;
-    console.log(`  Ratings obtenidos: ${found}/${ASINS.length}`);
+    const targetCountries = COUNTRIES;
+    console.log(`Modo ratings (por dominio): ${ASINS.length} ASINs → [${targetCountries.map(c => c.code).join(", ")}]`);
     for (const country of targetCountries) {
       // Only write ratings for ASINs that already have a product row with titulo.
-      // Avoids creating skeleton rows for countries without BuyBox data yet.
       const existing = await getAsinsWithTitulo(ASINS, country.code, supabaseUrl, supabaseKey, supabaseTable);
       if (existing.size === 0) {
         console.log(`  ${country.code}: sin filas de producto — saltado`);
         continue;
       }
-      const rows = ASINS
-        .filter(asin => existing.has(asin))
-        .map(asin => ({ asin, pais: country.code, rating: ratingMap.get(asin) ?? null }));
+      const domainAsins = ASINS.filter(asin => existing.has(asin));
+      const ratingMap = await fetchKeepaRatings(domainAsins, country.domain, country.code, keepaKey);
+      const found = [...ratingMap.values()].filter(v => v !== null).length;
+      console.log(`  ${country.code}: ${found}/${domainAsins.length} ratings obtenidos`);
+      const rows = domainAsins.map(asin => ({ asin, pais: country.code, rating: ratingMap.get(asin) ?? null }));
       await upsertRatings(rows, supabaseUrl, supabaseKey, supabaseTable);
       console.log(`  ${country.code}: ${rows.length} ratings guardados`);
     }

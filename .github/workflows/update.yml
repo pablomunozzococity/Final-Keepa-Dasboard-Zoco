@@ -17,6 +17,10 @@ on:
         description: "Borrar toda la tabla antes de cargar (true/false)"
         required: false
         default: "false"
+      run_mode:
+        description: "Modo de ejecución: buybox (default) | ratings (solo actualiza ratings, más barato)"
+        required: false
+        default: "buybox"
 
 jobs:
   update:
@@ -43,3 +47,4 @@ jobs:
           ASINS_OVERRIDE:   ${{ github.event.inputs.asins_override }}
           BATCH_SIZE:       ${{ github.event.inputs.batch_size || '50' }}
           CLEAR_TABLE:      ${{ github.event.inputs.clear_table || 'false' }}
+          RUN_MODE:         ${{ github.event.inputs.run_mode || 'buybox' }}

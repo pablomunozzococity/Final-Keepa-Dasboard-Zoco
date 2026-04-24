@@ -186,19 +186,18 @@ function mapProduct(
 
   const rating = extractRating(p.csv);
 
-  // Deal badge: Lightning Deal (csv[4] last value > 0) or active promotion with type code
+  // Deal badge: Lightning Deal (csv[4] last value > 0 means currently active — Keepa ends it
+  // by appending a -1 entry; no trailing -1 = deal is still live) or active promotion type.
   // Keepa promotion type codes: 2=Lightning Deal, 4=Deal of the Day, 8=Prime Exclusive,
   // 16=Prime Day, 32=Black Friday/Cyber Monday. Type 1=coupon (excluded — not a badge deal).
   const dealLabels = DEAL_LABELS_BY_PAIS[pais] ?? DEAL_LABELS_BY_PAIS.ES;
   let oferta: string | null = null;
   const lightningArr = p.csv?.[4];
   if (lightningArr && lightningArr.length >= 2) {
-    const lastPrice    = lightningArr[lightningArr.length - 1];
-    const lastKeepaTs  = lightningArr[lightningArr.length - 2];
-    // Keepa timestamps = Unix minutes − 21 564 000 (epoch 2011-01-01 UTC)
-    const nowKeepa = Math.floor(Date.now() / 60000) - 21564000;
-    if (lastPrice > 0 && (nowKeepa - lastKeepaTs) < 2880) { // active within 48 h
-      oferta = dealLabels[2] ?? "Vente flash";
+    const lastPrice = lightningArr[lightningArr.length - 1];
+    // If the last value is positive there is no closing -1 yet → deal is active right now
+    if (lastPrice > 0) {
+      oferta = dealLabels[2] ?? "Oferta flash";
     }
   }
   if (!oferta && p.promotions && p.promotions.length > 0) {

@@ -249,6 +249,16 @@ async function main() {
     }
   }
 
+  // Step 7b: Fetch ratings once from ES domain (ratings are product-level, same across all markets)
+  console.log(`\nFetching ratings para ${ASINS.length} ASINs...`);
+  const ratingMap = await fetchKeepaRatings(ASINS, 9, "ES", keepaKey);
+  const ratedCount = [...ratingMap.values()].filter(v => v !== null).length;
+  console.log(`  Ratings: ${ratedCount}/${ASINS.length} encontrados`);
+  for (const p of allProductos) {
+    const r = ratingMap.get(p.asin);
+    if (r != null) p.rating = r;
+  }
+
   // Step 8: Upsert to Supabase.
   // Products WITH title → full upsert (all fields including titulo, marca, img_url).
   // Products WITHOUT title → update only buybox fields, but ONLY for rows that already

@@ -27,16 +27,26 @@ type KeepaPromotion = {
   eligibleMembershipPrograms?: number[];
 };
 
+// Active deal attached to the buy box (real-time, returned in the product response)
+type KeepaDeals = {
+  badge?: string | null;       // badge text as shown on Amazon product page (already localized)
+  dealType?: string | null;    // e.g. LIMITED_TIME_DEAL, PRIME_DAY, GENERIC_OFFER_PROMO
+  percentClaimed?: number | null;
+  startTime?: number | null;   // Keepa Time minutes
+  endTime?: number | null;     // Keepa Time minutes
+  accessType?: string | null;  // e.g. ALL, PRIME_EARLY_ACCESS
+};
+
 type KeepaProduct = {
   asin: string;
   title?: string;
   brand?: string;
   imagesCSV?: string;
   images?: KeepaImage[];
-  // csv[4] = LIGHTNING_DEAL price, csv[16] = RATING (×10), csv[17] = COUNT_REVIEWS
-  // csv[16]/csv[17] require &rating=1. csv[4] is populated in standard requests.
+  // csv[16] = RATING (×10), csv[17] = COUNT_REVIEWS — require &rating=1 in the request.
   csv?: (number[] | null)[];
   promotions?: KeepaPromotion[] | null;
+  deals?: KeepaDeals[] | null;
   salesRanks?: Record<string, number[]> | null;
   salesRankReference?: number | null;
   categoryTree?: { catId: number; name: string }[] | null;
@@ -190,17 +200,17 @@ function mapProduct(
   // by appending a -1 entry; no trailing -1 = deal is still live) or active promotion type.
   // Keepa promotion type codes: 2=Lightning Deal, 4=Deal of the Day, 8=Prime Exclusive,
   // 16=Prime Day, 32=Black Friday/Cyber Monday. Type 1=coupon (excluded — not a badge deal).
-  const dealLabels = DEAL_LABELS_BY_PAIS[pais] ?? DEAL_LABELS_BY_PAIS.ES;
+  // Primary: deals[] array — real-time active deals on the buy box.
+  // badge is already localized by Amazon (e.g. "Oferta flash" for ES, "Offerta lampo" for IT).
   let oferta: string | null = null;
-  const lightningArr = p.csv?.[4];
-  if (lightningArr && lightningArr.length >= 2) {
-    const lastPrice = lightningArr[lightningArr.length - 1];
-    // If the last value is positive there is no closing -1 yet → deal is active right now
-    if (lastPrice > 0) {
-      oferta = dealLabels[2] ?? "Oferta flash";
-    }
+  if (p.deals && p.deals.length > 0) {
+    const deal = p.deals[0];
+    oferta = deal.badge ?? deal.dealType ?? (OFERTA_ACTIVA[pais] ?? "Oferta activa");
   }
+
+  // Fallback: promotions field (Amazon-US only, rarely populated for EU)
   if (!oferta && p.promotions && p.promotions.length > 0) {
+    const dealLabels = DEAL_LABELS_BY_PAIS[pais] ?? DEAL_LABELS_BY_PAIS.ES;
     const promo = p.promotions.find(pr => pr.type != null && pr.type !== 1);
     if (promo?.type != null) {
       oferta = dealLabels[promo.type] ?? (OFERTA_ACTIVA[pais] ?? "Oferta activa");

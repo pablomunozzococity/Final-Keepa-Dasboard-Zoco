@@ -620,8 +620,7 @@ function fmtRating(val) {
 
 function fmtOferta(val) {
   if (!val || !val.trim()) return '<span style="color:#aab4c0">—</span>';
-  const label = val.length > 18 ? val.slice(0,18)+'…' : val;
-  return '<span class="badge-oferta" title="'+val+'">🏷 '+label+'</span>';
+  return '<span class="badge-oferta" title="'+val+'">🏷 '+val+'</span>';
 }
 
 function groupByAsin(rows) {

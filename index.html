@@ -647,7 +647,6 @@ function groupByAsin(rows) {
     else if (!g.titulo && r.titulo)  g.titulo = r.titulo;
     if (!g.marca   && r.marca)   g.marca   = r.marca;
     if (!g.imgUrl  && r.imgUrl)  g.imgUrl  = r.imgUrl;
-    if (g.rating == null && r.rating != null) g.rating = r.rating;
     if (!g.oferta  && r.oferta)  g.oferta  = r.oferta;
     g.paises.push(r);
   });
@@ -658,6 +657,10 @@ function groupByAsin(rows) {
     if (esFBAEnAlgunPais) {
       g.paises.forEach(p => { if (p.esFBA === null || p.esFBA === undefined) p.esFBA = true; });
     }
+    const ratings = g.paises.map(p => p.rating).filter(v => v != null);
+    g.rating = ratings.length > 0
+      ? Math.round(ratings.reduce((a, b) => a + b, 0) / ratings.length * 10) / 10
+      : null;
   });
   return [...map.values()];
 }
@@ -789,6 +792,7 @@ function renderTable() {
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Buy Box</td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Precio BB / Mín 30d</td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Cambio</td>';
+      html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Rating</td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">FBA / Amazon</td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Ranking</td>';
       html += '<td style="font-size:11px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.8px">Oferta</td>';
@@ -803,6 +807,7 @@ function renderTable() {
         html += '<td>'+bbBadge+'</td>';
         html += '<td>'+fmtP(r.precio)+(r.precioMin!=null?' <span style="font-size:11px;color:#3498db;margin-left:4px">mín '+Number(r.precioMin).toFixed(2)+' €</span>':'')+'</td>';
         html += '<td>'+cambio+'</td>';
+        html += '<td>'+fmtRating(r.rating)+'</td>';
         html += '<td>'+fbaLabel+' <a class="btn-amazon" href="https://www.'+getDomain(r.pais)+'/dp/'+r.asin+'" target="_blank" rel="noopener" style="margin-left:4px">↗ Ver</a></td>';
         html += '<td>'+rankHtml+'</td>';
         html += '<td>'+fmtOferta(r.oferta)+'</td>';

@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { getAsinBatch, TOTAL_BATCHES } from "./asins.js";
-import { fetchKeepaProducts, fetchKeepaRatings } from "./keepa-client.js";
+import { fetchKeepaProducts, fetchKeepaRatings, getKeepaTokenBalance } from "./keepa-client.js";
 import { fetchCategoryInfo } from "./category-client.js";
 import { fetchSellerNames } from "./seller-client.js";
 import {
@@ -41,6 +41,13 @@ const RUN_CONFIG: Record<number, string> = {
 async function main() {
   const keepaKey = process.env.KEEPA_API_KEY;
   if (!keepaKey) throw new Error("KEEPA_API_KEY is not set");
+
+  const tokens = await getKeepaTokenBalance(keepaKey);
+  console.log(`Keepa tokens disponibles: ${tokens}`);
+  if (tokens < 1000) {
+    console.log("Tokens insuficientes (<1000) — run pospuesto. El próximo cron lo reintentará.");
+    process.exit(0);
+  }
 
   const supabaseUrl = process.env.SUPABASE_URL;
   if (!supabaseUrl) throw new Error("SUPABASE_URL is not set");

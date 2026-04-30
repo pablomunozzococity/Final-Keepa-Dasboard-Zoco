@@ -1,6 +1,14 @@
 const KEEPA_BASE = "https://api.keepa.com";
 const IMAGE_BASE = "https://m.media-amazon.com/images/I/";
 
+// Returns current token balance without consuming any tokens.
+export async function getKeepaTokenBalance(key: string): Promise<number> {
+  const res = await fetch(`${KEEPA_BASE}/token?key=${key}`);
+  if (!res.ok) throw new Error(`Keepa token check failed: ${res.status}`);
+  const data = await res.json() as { tokensLeft: number };
+  return data.tokensLeft;
+}
+
 // Keepa csv price type indices (used in stats.current[], stats.min[], stats.atIntervalStart[])
 // 18 = BUY_BOX_SHIPPING: buy box price including shipping (new)
 // 10 = NEW_FBA: lowest new FBA offer price

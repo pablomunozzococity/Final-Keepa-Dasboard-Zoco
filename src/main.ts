@@ -251,13 +251,17 @@ async function main() {
     const domainRows = allProductos.filter(p => p.pais === country.code);
     if (domainRows.length === 0) continue;
     const domainAsins = [...new Set(domainRows.map(p => p.asin))];
-    const ratingMap = await fetchKeepaRatings(domainAsins, country.domain, country.code, keepaKey);
-    let found = 0;
-    for (const p of domainRows) {
-      const r = ratingMap.get(p.asin);
-      if (r != null) { p.rating = r; found++; }
+    try {
+      const ratingMap = await fetchKeepaRatings(domainAsins, country.domain, country.code, keepaKey);
+      let found = 0;
+      for (const p of domainRows) {
+        const r = ratingMap.get(p.asin);
+        if (r != null) { p.rating = r; found++; }
+      }
+      console.log(`  ${country.code}: ${found}/${domainAsins.length} ratings`);
+    } catch (err) {
+      console.warn(`  ${country.code}: ⚠ ratings omitidos por tokens insuficientes — ${(err as Error).message}`);
     }
-    console.log(`  ${country.code}: ${found}/${domainAsins.length} ratings`);
   }
   // Persist ratings collected above (upsertProductos excludes this field)
   const ratingRows = allProductos

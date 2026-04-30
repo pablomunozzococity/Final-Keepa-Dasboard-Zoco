@@ -259,6 +259,14 @@ async function main() {
     }
     console.log(`  ${country.code}: ${found}/${domainAsins.length} ratings`);
   }
+  // Persist ratings collected above (upsertProductos excludes this field)
+  const ratingRows = allProductos
+    .filter(p => p.rating != null)
+    .map(p => ({ asin: p.asin, pais: p.pais, rating: p.rating! }));
+  if (ratingRows.length > 0) {
+    console.log(`\nGuardando ${ratingRows.length} ratings en Supabase...`);
+    await upsertRatings(ratingRows, supabaseUrl, supabaseKey, supabaseTable);
+  }
 
   // Step 8: Upsert to Supabase.
   // Products WITH title → full upsert (all fields including titulo, marca, img_url).

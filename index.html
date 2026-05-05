@@ -390,7 +390,7 @@ async function loadData() {
 
     setLoadingBar(100);
     updateSelects();
-    const vulkanoMatch = msState.marca.all.find(m => m.toLowerCase().includes('vulkano'));
+    const vulkanoMatch = msState.marca.all.find(m => m.toLowerCase().includes('vulkano') || m.toLowerCase().includes('vulkkano'));
     if (vulkanoMatch) {
       msState.marca.selected.add(vulkanoMatch);
       renderOptions('marca', msState.marca.all);

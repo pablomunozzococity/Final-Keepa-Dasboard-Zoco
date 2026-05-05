@@ -303,7 +303,7 @@ const ROWS_PER_PAGE = 50;
 
 let allData = [], filteredData = [], currentPage = 1;
 let currentSort = { col:null, dir:1 };
-const activeFilters = new Set(); // empty = show all
+const activeFilters = new Set(['fba']); // default: FBA only
 const favorites = new Set(JSON.parse(localStorage.getItem('buybox_favorites') || '[]'));
 function saveFavorites() { localStorage.setItem('buybox_favorites', JSON.stringify([...favorites])); }
 
@@ -390,6 +390,8 @@ async function loadData() {
 
     setLoadingBar(100);
     updateSelects();
+    document.getElementById('btnAll').classList.remove('active');
+    document.getElementById('btnFBA').classList.add('active');
     applyFilters();
     setTimeout(() => setLoadingBar(0), 500);
 

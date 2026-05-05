@@ -390,6 +390,12 @@ async function loadData() {
 
     setLoadingBar(100);
     updateSelects();
+    const vulkanoMatch = msState.marca.all.find(m => m.toLowerCase().includes('vulkano'));
+    if (vulkanoMatch) {
+      msState.marca.selected.add(vulkanoMatch);
+      renderOptions('marca', msState.marca.all);
+      updateTriggerLabel('marca');
+    }
     document.getElementById('btnAll').classList.remove('active');
     document.getElementById('btnFBA').classList.add('active');
     applyFilters();

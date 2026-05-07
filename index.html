@@ -307,6 +307,36 @@ const activeFilters = new Set(['fba']); // default: FBA only
 const favorites = new Set(JSON.parse(localStorage.getItem('buybox_favorites') || '[]'));
 function saveFavorites() { localStorage.setItem('buybox_favorites', JSON.stringify([...favorites])); }
 
+async function loadFavoritesFromSupabase(username) {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/user_favorites?username=eq.${encodeURIComponent(username)}&select=favorites`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+    );
+    const data = await res.json();
+    if (Array.isArray(data) && data[0]?.favorites?.length) {
+      favorites.clear();
+      data[0].favorites.forEach(a => favorites.add(a));
+      saveFavorites();
+    }
+  } catch (_) {}
+}
+
+async function saveFavoritesToSupabase(username) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/user_favorites`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({ username, favorites: [...favorites], updated_at: new Date().toISOString() })
+    });
+  } catch (_) {}
+}
+
 // ── LOGIN ──
 function doLogin() {
   const user = document.getElementById('loginUser').value.trim();
@@ -316,7 +346,7 @@ function doLogin() {
     sessionStorage.setItem('zc_auth', user);
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('dashboard').style.display   = 'block';
-    loadData();
+    loadFavoritesFromSupabase(user).then(() => loadData());
   } else {
     err.textContent = 'Usuario o contraseña incorrectos';
     setTimeout(() => err.textContent = '', 3000);
@@ -332,7 +362,7 @@ function logout() {
 if (sessionStorage.getItem('zc_auth')) {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('dashboard').style.display   = 'block';
-  loadData();
+  loadFavoritesFromSupabase(sessionStorage.getItem('zc_auth')).then(() => loadData());
 }
 
 // ── CARGAR DATOS DE SUPABASE ──
@@ -616,6 +646,8 @@ function toggleFav(asin, btn, event) {
   if (favorites.has(asin)) { favorites.delete(asin); btn.classList.remove('on'); }
   else { favorites.add(asin); btn.classList.add('on'); }
   saveFavorites();
+  const _user = sessionStorage.getItem('zc_auth');
+  if (_user) saveFavoritesToSupabase(_user);
   if (activeFilters.has('fav')) applyFilters();
 }
 

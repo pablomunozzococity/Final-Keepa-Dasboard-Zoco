@@ -968,6 +968,11 @@ async function processAsinFile() {
     )];
     if (!newAsins.length) { status.textContent = 'No hay ASINs nuevos válidos (ya existen o formato incorrecto).'; return; }
     status.textContent = `Añadiendo ${newAsins.length} ASINs...`;
+    // Remove from disabled_asins in case these were previously deleted
+    await Promise.all(newAsins.map(asin => fetch(
+      `${SUPABASE_URL}/rest/v1/disabled_asins?asin=eq.${asin}`,
+      { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+    )));
     const payload = newAsins.map(asin => ({ asin, added_by: user, added_at: new Date().toISOString() }));
     const res = await fetch(`${SUPABASE_URL}/rest/v1/custom_asins`, {
       method: 'POST',

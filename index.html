@@ -116,6 +116,15 @@
   .badge-oferta { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; background:rgba(243,156,18,0.12); color:#d68910; border:1px solid rgba(243,156,18,0.3); white-space:nowrap; }
   .fav-star { background:none; border:none; cursor:pointer; font-size:13px; padding:0 0 0 5px; color:#dde2e8; line-height:1; vertical-align:middle; transition:color .15s; }
   .fav-star.on { color:#f1c40f; }
+  .del-asin { background:none; border:none; cursor:pointer; font-size:12px; padding:0 0 0 4px; color:#e74c3c; line-height:1; vertical-align:middle; opacity:0.5; transition:opacity .15s; }
+  .del-asin:hover { opacity:1; }
+  #addAsinsModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center; }
+  .modal-box { background:#fff; border-radius:10px; padding:28px; width:420px; max-width:92vw; box-shadow:0 8px 32px rgba(0,0,0,0.18); }
+  .modal-box h3 { font-size:17px; margin-bottom:10px; color:#1a1f25; }
+  .modal-box p { font-size:13px; color:#6b7a8d; margin-bottom:14px; }
+  .modal-box input[type=file] { width:100%; font-size:13px; color:#1a1f25; margin-bottom:10px; }
+  #addAsinsStatus { font-size:13px; color:#6b7a8d; min-height:18px; margin-bottom:12px; }
+  .modal-actions { display:flex; gap:8px; justify-content:flex-end; }
 
   /* ── PAGINATION ── */
   .pagination { display:flex; align-items:center; justify-content:space-between; padding:16px 40px; border-top:1px solid #dde2e8; font-size:13px; color:#6b7a8d; }
@@ -259,6 +268,7 @@
 
     <input type="text" id="searchInput" placeholder="Buscar producto o ASIN..." oninput="applyFilters()">
     <button class="filter-btn" id="btnFav" onclick="setFilter('fav')">★ Favoritos</button>
+    <button class="filter-btn" id="btnAddAsins" onclick="showAddAsinsModal()" style="display:none">+ Añadir ASINs</button>
   </div>
 
   <!-- TABLE -->
@@ -346,6 +356,7 @@ function doLogin() {
     sessionStorage.setItem('zc_auth', user);
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('dashboard').style.display   = 'block';
+    document.getElementById('btnAddAsins').style.display = 'inline-block';
     loadFavoritesFromSupabase(user).then(() => loadData());
   } else {
     err.textContent = 'Usuario o contraseña incorrectos';
@@ -362,6 +373,7 @@ function logout() {
 if (sessionStorage.getItem('zc_auth')) {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('dashboard').style.display   = 'block';
+  document.getElementById('btnAddAsins').style.display = 'inline-block';
   loadFavoritesFromSupabase(sessionStorage.getItem('zc_auth')).then(() => loadData());
 }
 
@@ -639,7 +651,30 @@ function sortData() {
 // ── RENDER ──
 function asinHtml(asin) {
   const on = favorites.has(asin) ? ' on' : '';
-  return `<div class="asin" onclick="copyAsin('${asin}',this,event)" title="Clic para copiar">${asin} <span class="copy-icon">⎘</span><button class="fav-star${on}" onclick="toggleFav('${asin}',this,event)" title="Marcar favorito">★</button></div>`;
+  const delBtn = sessionStorage.getItem('zc_auth')
+    ? `<button class="del-asin" onclick="deleteAsin('${asin}',event)" title="Eliminar ASIN del seguimiento">✕</button>`
+    : '';
+  return `<div class="asin" onclick="copyAsin('${asin}',this,event)" title="Clic para copiar">${asin} <span class="copy-icon">⎘</span><button class="fav-star${on}" onclick="toggleFav('${asin}',this,event)" title="Marcar favorito">★</button>${delBtn}</div>`;
+}
+
+async function deleteAsin(asin, event) {
+  event.stopPropagation();
+  const user = sessionStorage.getItem('zc_auth');
+  if (!user) return;
+  if (!confirm(`¿Eliminar ${asin} del seguimiento?\nSe borrarán sus datos de todos los países. Esta acción no se puede deshacer.`)) return;
+  const h = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' };
+  await fetch(`${SUPABASE_URL}/rest/v1/disabled_asins`, {
+    method: 'POST', headers: h,
+    body: JSON.stringify({ asin, disabled_by: user, disabled_at: new Date().toISOString() })
+  });
+  await fetch(`${SUPABASE_URL}/rest/v1/productos?asin=eq.${asin}`, {
+    method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+  });
+  await fetch(`${SUPABASE_URL}/rest/v1/custom_asins?asin=eq.${asin}`, {
+    method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+  });
+  allData = allData.filter(p => p.asin !== asin);
+  applyFilters();
 }
 function toggleFav(asin, btn, event) {
   event.stopPropagation();
@@ -899,6 +934,69 @@ function goPage(p) {
   currentPage=p; renderTable(); renderPagination();
   window.scrollTo({top:0,behavior:'smooth'});
 }
+
+function showAddAsinsModal() {
+  if (!sessionStorage.getItem('zc_auth')) return;
+  document.getElementById('addAsinsStatus').textContent = '';
+  document.getElementById('asinFileInput').value = '';
+  document.getElementById('addAsinsModal').style.display = 'flex';
+}
+function closeAddAsinsModal() {
+  document.getElementById('addAsinsModal').style.display = 'none';
+}
+async function processAsinFile() {
+  const file = document.getElementById('asinFileInput').files[0];
+  const status = document.getElementById('addAsinsStatus');
+  if (!file) { status.textContent = 'Selecciona un archivo primero.'; return; }
+  const user = sessionStorage.getItem('zc_auth');
+  if (!user) return;
+  status.textContent = 'Leyendo archivo...';
+  try {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    if (!rows.length) { status.textContent = 'El archivo está vacío.'; return; }
+    const header = rows[0].map(h => String(h).toLowerCase().trim());
+    const col = header.indexOf('asins');
+    if (col === -1) { status.textContent = 'No se encontró columna "asins".'; return; }
+    const existingAsins = new Set(allData.map(p => p.asin));
+    const newAsins = [...new Set(
+      rows.slice(1)
+        .map(r => String(r[col] ?? '').trim().toUpperCase())
+        .filter(a => /^[A-Z0-9]{10}$/.test(a) && !existingAsins.has(a))
+    )];
+    if (!newAsins.length) { status.textContent = 'No hay ASINs nuevos válidos (ya existen o formato incorrecto).'; return; }
+    status.textContent = `Añadiendo ${newAsins.length} ASINs...`;
+    const payload = newAsins.map(asin => ({ asin, added_by: user, added_at: new Date().toISOString() }));
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/custom_asins`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) { status.textContent = 'Error al guardar en Supabase. Inténtalo de nuevo.'; return; }
+    status.style.color = '#2ecc71';
+    status.textContent = `✓ ${newAsins.length} ASINs añadidos. Aparecerán tras el próximo run del pipeline (~30 min).`;
+  } catch(e) {
+    status.style.color = '#e74c3c';
+    status.textContent = 'Error al leer el archivo. Asegúrate de que es un Excel o CSV válido.';
+  }
+}
 </script>
+
+<!-- Modal: Añadir ASINs -->
+<div id="addAsinsModal">
+  <div class="modal-box">
+    <h3>Añadir ASINs al seguimiento</h3>
+    <p>Sube un archivo Excel o CSV con una columna llamada <strong>asins</strong>. Los nuevos ASINs aparecerán en el dashboard tras el próximo run del pipeline (~30 min).</p>
+    <input type="file" id="asinFileInput" accept=".xlsx,.xls,.csv">
+    <div id="addAsinsStatus"></div>
+    <div class="modal-actions">
+      <button class="filter-btn" onclick="closeAddAsinsModal()">Cancelar</button>
+      <button class="filter-btn active" onclick="processAsinFile()">Añadir</button>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </body>
 </html>

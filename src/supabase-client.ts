@@ -371,6 +371,26 @@ export async function getBatchState(url: string, key: string): Promise<number> {
   return rows?.[0]?.value ?? 1;
 }
 
+// Returns the set of ASINs marked as disabled (removed from tracking via dashboard).
+export async function getDisabledAsins(url: string, key: string): Promise<Set<string>> {
+  const res = await fetch(`${url}/rest/v1/disabled_asins?select=asin`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  });
+  if (!res.ok) return new Set();
+  const rows = await res.json() as { asin: string }[];
+  return new Set(rows.map(r => r.asin));
+}
+
+// Returns ASINs added manually via dashboard (custom_asins table), ordered by insertion date.
+export async function getCustomAsins(url: string, key: string): Promise<string[]> {
+  const res = await fetch(`${url}/rest/v1/custom_asins?select=asin&order=added_at.asc`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  });
+  if (!res.ok) return [];
+  const rows = await res.json() as { asin: string }[];
+  return rows.map(r => r.asin);
+}
+
 // Saves the current batch number to the batch_state table.
 export async function setBatchState(value: number, url: string, key: string): Promise<void> {
   await fetch(`${url}/rest/v1/batch_state?key=eq.current_batch`, {

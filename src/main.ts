@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { getAsinBatch, TOTAL_BATCHES } from "./asins.js";
+import { PROD_ASINS, TOTAL_BATCHES, getAsinBatch, getAsinBatchFromList } from "./asins.js";
 import { fetchKeepaProducts, fetchKeepaRatings, getKeepaTokenBalance } from "./keepa-client.js";
 import { fetchCategoryInfo } from "./category-client.js";
 import { fetchSellerNames } from "./seller-client.js";
@@ -16,6 +16,8 @@ import {
   clearAllProductos,
   getBatchState,
   setBatchState,
+  getDisabledAsins,
+  getCustomAsins,
 } from "./supabase-client.js";
 
 type CountryConfig = {
@@ -79,15 +81,27 @@ async function main() {
   let currentBatch: number | null = null;
   let ASINS: string[];
 
+  let dynamicTotalBatches = TOTAL_BATCHES;
+
   if (asinsOverride) {
     ASINS = asinsOverride.split(",").map(a => a.trim()).filter(Boolean);
     console.log(`Modo override: ${ASINS.length} ASINs fijos`);
   } else {
     currentBatch = await getBatchState(supabaseUrl, supabaseKey);
-    ASINS = getAsinBatch(currentBatch, batchSize);
-    const from = (currentBatch - 1) * batchSize + 1;
-    const to = Math.min(currentBatch * batchSize, 385);
-    console.log(`Lote ${currentBatch}/${TOTAL_BATCHES}: ASINs ${from}–${to} (${ASINS.length} productos)`);
+    const [disabledAsins, customAsins] = await Promise.all([
+      getDisabledAsins(supabaseUrl, supabaseKey),
+      getCustomAsins(supabaseUrl, supabaseKey),
+    ]);
+    const mergedAsins = [
+      ...PROD_ASINS.filter(a => !disabledAsins.has(a)),
+      ...customAsins.filter(a => !disabledAsins.has(a) && !PROD_ASINS.includes(a)),
+    ];
+    dynamicTotalBatches = Math.ceil(mergedAsins.length / batchSize);
+    ASINS = getAsinBatchFromList(mergedAsins, currentBatch, batchSize);
+    const adjusted = ((currentBatch - 1) % dynamicTotalBatches + dynamicTotalBatches) % dynamicTotalBatches;
+    const from = adjusted * batchSize + 1;
+    const to = Math.min(from + ASINS.length - 1, mergedAsins.length);
+    console.log(`Lote ${currentBatch}/${dynamicTotalBatches}: ASINs ${from}–${to} (${ASINS.length} productos, ${disabledAsins.size} desactivados, ${customAsins.length} custom)`);
   }
 
   // ── RATINGS MODE: fetch and write per-domain ratings (ratings differ by marketplace on Keepa).
@@ -331,9 +345,9 @@ async function main() {
 
   // Advance to next batch (only in auto-rotation mode, not in override/test mode)
   if (currentBatch !== null) {
-    const nextBatch = (currentBatch % TOTAL_BATCHES) + 1;
+    const nextBatch = (currentBatch % dynamicTotalBatches) + 1;
     await setBatchState(nextBatch, supabaseUrl, supabaseKey);
-    console.log(`Próximo lote: ${nextBatch}/${TOTAL_BATCHES}`);
+    console.log(`Próximo lote: ${nextBatch}/${dynamicTotalBatches}`);
   }
 
   console.log("Completado correctamente.");

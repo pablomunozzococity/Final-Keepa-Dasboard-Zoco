@@ -1,6 +1,6 @@
 // ── ASINs a monitorizar ───────────────────────────────────────────────────────
 
-const PROD_ASINS: string[] = [
+export const PROD_ASINS: string[] = [
   "B078PX4575", "B078PQJSRY", "B0792QR5YT", "B01LW6CYEC", "B01LVW4SLP",
   "B01LW0G46K", "B01LVUWOBX", "B01LW1Q429", "B01LW1Q4X9", "B06ZXWN3BG",
   "B074XBXFPD", "B076BZSRKQ", "B0756RS87H", "B00JLV4BWC", "B01MZ6T8VF",
@@ -99,4 +99,11 @@ export function getAsinBatch(batchNum: number, batchSize = 50): string[] {
   const adjusted = ((batchNum - 1) % total + total) % total;
   const start = adjusted * batchSize;
   return PROD_ASINS.slice(start, start + batchSize);
+}
+
+export function getAsinBatchFromList(list: string[], batchNum: number, batchSize = 50): string[] {
+  const total = Math.ceil(list.length / batchSize);
+  const adjusted = ((batchNum - 1) % total + total) % total;
+  const start = adjusted * batchSize;
+  return list.slice(start, start + batchSize);
 }

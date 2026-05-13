@@ -24,6 +24,17 @@ No lint or test commands configured.
 - **Pipeline**: push to `main` → GitHub Actions responds to `workflow_dispatch`. The schedule trigger was removed; cron-job.org fires it every 30 min via the GitHub API.
 - **Dashboard**: edit `index.html`, commit, push → GitHub Pages updates in ~2 minutes.
 
+### Manual pipeline trigger (GitHub Actions UI or API)
+
+The `workflow_dispatch` accepts these optional inputs (all map to env vars of the same name):
+
+| Input | Default | Effect |
+|---|---|---|
+| `asins_override` | `` | Fixed comma-separated ASINs — skips batch rotation |
+| `batch_size` | `50` | ASINs per rotation batch |
+| `clear_table` | `false` | `true` wipes the table before loading |
+| `run_mode` | `buybox` | `ratings` for a cheap ratings-only run |
+
 ## Architecture
 
 ```
@@ -55,7 +66,11 @@ GitHub Pages → index.html
 - `getAsinBatchFromList(list, batchNum, size)` — batch slice from any list, with wraparound; used in normal rotation
 - `getAsinBatch(batchNum, size)` — legacy version that operates on `PROD_ASINS` directly
 
-**`src/keepa-client.ts`** — all Keepa API calls. Keepa domain codes: ES=9, FR=4, IT=8, DE=3. Prices stored as cents (÷100 for display). Ratings stored ×10 by Keepa (÷10 for display). Batches 100 ASINs per API call. Each full run (~50 ASINs × 4 countries + ratings) costs ~920 tokens.
+**`src/keepa-client.ts`** — all Keepa API calls. Keepa domain codes: ES=9, FR=4, IT=8, DE=3. Prices stored as cents (÷100 for display). Ratings stored ×10 by Keepa (÷10 for display). Batches 100 ASINs per API call (internal, separate from the 50-ASIN rotation batch). Each full run (~50 ASINs × 4 countries + ratings) costs ~920 tokens. If tokens drop below 100 mid-run, stops early and returns `stoppedEarly: true` — distinct from the 950-token guard in `main.ts` that skips the run entirely. Retries on HTTP 429 with exponential backoff (5s × 2^attempt, up to 3 retries).
+
+**`src/category-client.ts`** — fetches category metadata from Keepa `/category` endpoint. Uses `productCount ?? highestRank ?? 0` as the total product count for `ranking_pct` calculations. Returns `null` on failure (non-fatal).
+
+**`src/seller-client.ts`** — fetches seller display names from Keepa `/seller` endpoint. Each seller is fetched in the domain where it was first seen, for name accuracy. Returns only sellers that Keepa has a name for; missing sellers stay as raw IDs.
 
 **`src/supabase-client.ts`** — Supabase REST client. Three upsert functions:
 - `upsertProductos` — full upsert, excludes `rating` field (managed exclusively by `upsertRatings` to avoid overwriting with null). Composite PK is `(asin, pais)`.
@@ -83,10 +98,13 @@ Also contains `getViolations()`, `getLastAlertSent()`, `setLastAlertSent()` for 
 | `custom_asins` | ASINs added via dashboard Excel upload |
 | `disabled_asins` | ASINs removed via dashboard delete button |
 
+**Ratings in buybox mode** — `buybox` mode (the default) fetches ratings inline as step 7b in `main.ts`, writing them via `upsertRatings` right after product upserts. The separate `ratings` RUN_MODE exists as a cheaper dedicated run (uses `&rating=1` only, no `&stats=1&buybox=1`) for cases where you want to refresh ratings without spending buybox tokens.
+
 **Exclusive-brand alert system** — triggers on every round completion (`nextBatch === 1` after batch advance, ~every 4 hours):
 - Queries `productos` for rows where `hay_buybox=true AND tenemos=false`, filters by `isExclusiveBrand`
 - Throttled to once per UTC day via `last_alert_sent` in `batch_state`. **Important**: `setLastAlertSent` is called even when there are 0 violations — so once the first round of the day completes, subsequent rounds that day are skipped regardless of new violations appearing.
 - Requires `RESEND_API_KEY` env var; degrades gracefully (logs warning) if missing
+- Alert recipient is hardcoded to `pablo.munoz@zococity.com` in `main.ts`
 
 **`index.html`** — everything in one file: CSS, HTML, JS. Key globals:
 - `activeFilters` (Set) — button filters (fba/fbm/win/lose/changed/fav); empty = show all

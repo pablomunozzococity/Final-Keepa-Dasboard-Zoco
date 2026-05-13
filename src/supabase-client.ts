@@ -404,3 +404,81 @@ export async function setBatchState(value: number, url: string, key: string): Pr
     body: JSON.stringify({ value, updated_at: new Date().toISOString() }),
   });
 }
+
+// ── Exclusive-brand violation alerts ─────────────────────────────────────────
+
+import { isExclusiveBrand, type Marketplace } from "./exclusive-brands.js";
+import type { ViolationRow } from "./alert-client.js";
+
+/**
+ * Queries all productos rows where hay_buybox=true AND tenemos=false,
+ * then filters client-side to only those covered by exclusive-brand rules.
+ */
+export async function getViolations(
+  supabaseUrl: string,
+  supabaseKey: string,
+  table = "productos"
+): Promise<ViolationRow[]> {
+  const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+
+  const url =
+    `${supabaseUrl}/rest/v1/${table}` +
+    `?select=asin,titulo,marca,pais,vendedor,vendedor_nombre,precio` +
+    `&hay_buybox=eq.true&tenemos=eq.false&titulo=not.is.null`;
+
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`getViolations failed: ${res.status} ${text.slice(0, 300)}`);
+  }
+
+  const rows = (await res.json()) as ViolationRow[];
+  return rows.filter((r) =>
+    isExclusiveBrand(r.asin, r.marca, r.pais as Marketplace)
+  );
+}
+
+/**
+ * Returns the Unix timestamp (ms) of the last alert email sent,
+ * or null if no alert has ever been sent.
+ */
+export async function getLastAlertSent(
+  url: string,
+  key: string
+): Promise<number | null> {
+  const res = await fetch(
+    `${url}/rest/v1/batch_state?key=eq.last_alert_sent&select=value`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+  );
+  if (!res.ok) return null;
+  const rows = (await res.json()) as { value: number }[];
+  return rows?.[0]?.value ?? null;
+}
+
+/**
+ * Records the current time as the last alert sent timestamp.
+ * Uses upsert so it works whether or not the row exists.
+ */
+export async function setLastAlertSent(url: string, key: string): Promise<void> {
+  const res = await fetch(
+    `${url}/rest/v1/batch_state?on_conflict=key`,
+    {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal,resolution=merge-duplicates",
+      },
+      body: JSON.stringify({
+        key: "last_alert_sent",
+        value: Date.now(),
+        updated_at: new Date().toISOString(),
+      }),
+    }
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.warn(`setLastAlertSent failed: ${res.status} ${text.slice(0, 200)}`);
+  }
+}

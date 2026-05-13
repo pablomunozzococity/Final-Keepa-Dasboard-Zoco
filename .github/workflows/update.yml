@@ -41,6 +41,7 @@ jobs:
           SUPABASE_URL:     ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:     ${{ secrets.SUPABASE_KEY }}
           MI_VENDEDOR_ID:   ${{ secrets.MI_VENDEDOR_ID }}
+          RESEND_API_KEY:   ${{ secrets.RESEND_API_KEY }}
           SUPABASE_TABLE:   productos
           ASINS_OVERRIDE:   ${{ github.event.inputs.asins_override }}
           BATCH_SIZE:       ${{ github.event.inputs.batch_size || '50' }}

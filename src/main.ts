@@ -18,7 +18,11 @@ import {
   setBatchState,
   getDisabledAsins,
   getCustomAsins,
+  getViolations,
+  getLastAlertSent,
+  setLastAlertSent,
 } from "./supabase-client.js";
+import { sendViolationAlert } from "./alert-client.js";
 
 type CountryConfig = {
   code: string;
@@ -348,6 +352,35 @@ async function main() {
     const nextBatch = (currentBatch % dynamicTotalBatches) + 1;
     await setBatchState(nextBatch, supabaseUrl, supabaseKey);
     console.log(`Próximo lote: ${nextBatch}/${dynamicTotalBatches}`);
+
+    // When nextBatch wraps to 1, all ASINs have been checked — send violation alert
+    if (nextBatch === 1) {
+      console.log("\nRonda completa — verificando violaciones de exclusiva...");
+      const resendApiKey = process.env.RESEND_API_KEY;
+      if (!resendApiKey) {
+        console.warn("RESEND_API_KEY no configurado — alertas de exclusiva desactivadas");
+      } else {
+        const lastSent = await getLastAlertSent(supabaseUrl, supabaseKey);
+        const hoyUTC = new Date();
+        hoyUTC.setUTCHours(0, 0, 0, 0);
+        if (lastSent !== null && lastSent >= hoyUTC.getTime()) {
+          console.log("Alerta de exclusiva ya enviada hoy — omitida");
+        } else {
+          const violations = await getViolations(supabaseUrl, supabaseKey, supabaseTable);
+          console.log(`Violaciones de exclusiva detectadas: ${violations.length}`);
+          if (violations.length > 0) {
+            const result = await sendViolationAlert(
+              violations,
+              resendApiKey,
+              "pablo.munoz@zococity.com"
+            );
+            if (result.ok) console.log(`Alerta enviada correctamente (id: ${result.id})`);
+            else console.error(`Error al enviar alerta de exclusiva: ${result.error}`);
+          }
+          await setLastAlertSent(supabaseUrl, supabaseKey);
+        }
+      }
+    }
   }
 
   console.log("Completado correctamente.");

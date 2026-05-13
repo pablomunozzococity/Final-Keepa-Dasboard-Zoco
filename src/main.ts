@@ -46,8 +46,8 @@ async function main() {
 
   const tokens = await getKeepaTokenBalance(keepaKey);
   console.log(`Keepa tokens disponibles: ${tokens}`);
-  if (tokens < 1000) {
-    console.log("Tokens insuficientes (<1000) — run pospuesto. El próximo cron lo reintentará.");
+  if (tokens < 950) {
+    console.log("Tokens insuficientes (<950) — run pospuesto. El próximo cron lo reintentará.");
     process.exit(0);
   }
 

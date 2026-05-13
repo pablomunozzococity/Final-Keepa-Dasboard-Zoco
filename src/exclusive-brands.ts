@@ -1,5 +1,13 @@
 export type Marketplace = "ES" | "FR" | "IT" | "DE";
 
+// ASINs explicitly excluded from violation alerts regardless of brand rules
+export const ALERT_EXCLUDED_ASINS = new Set<string>([
+  "B0FYHFZF65",
+  "B0C7C3Y7WW",
+  "B0F1H537DN",
+  "B0CSFF8PFR",
+]);
+
 export const EDIFIER_ES_ASINS = new Set<string>([
   "B07MC6D6NZ",
   "B0G25Y7M6C",
@@ -24,6 +32,7 @@ export function isExclusiveBrand(
   marca: string,
   pais: Marketplace
 ): boolean {
+  if (ALERT_EXCLUDED_ASINS.has(asin)) return false;
   const m = marca.toLowerCase();
 
   for (const b of ALL_EU_BRANDS)  if (m.includes(b)) return true;

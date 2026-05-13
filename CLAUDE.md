@@ -43,10 +43,11 @@ GitHub Pages → index.html
 - Token guard at start: exits cleanly if Keepa tokens < 950 (plan generates 21 tokens/min, bucket cap 1260)
 - Two run modes: `buybox` (full, expensive) and `ratings` (ratings-only, cheap)
 - Dynamic ASIN list: merges `asins.ts` base list + `custom_asins` table − `disabled_asins` table on every run
-- `TOTAL_BATCHES` is calculated dynamically from the merged list length (not hardcoded)
+- `dynamicTotalBatches` is calculated from the merged list length (not hardcoded)
 - Batch rotation: state persisted in `batch_state` Supabase table, advances after each run
 - Per-country loop: each marketplace fetched separately (ratings differ per Amazon domain)
 - Partial failure resilience: if Keepa fails mid-country, existing DB rows are preserved
+- Upsert split: products with a non-empty title → `upsertProductos` (full). Products without title → `upsertBuyboxOnly` only if a titulo row already exists; otherwise the skeleton row is deleted via `deleteProductosByAsins`
 
 **`src/asins.ts`** — base ASIN list (385 hardcoded). Key exports:
 - `PROD_ASINS` — full array, used by main.ts to build the merged list
@@ -56,18 +57,36 @@ GitHub Pages → index.html
 
 **`src/keepa-client.ts`** — all Keepa API calls. Keepa domain codes: ES=9, FR=4, IT=8, DE=3. Prices stored as cents (÷100 for display). Ratings stored ×10 by Keepa (÷10 for display). Batches 100 ASINs per API call. Each full run (~50 ASINs × 4 countries + ratings) costs ~920 tokens.
 
-**`src/supabase-client.ts`** — Supabase REST client. `upsertProductos` excludes the `rating` field (managed exclusively by `upsertRatings` to avoid overwriting with null). Composite PK is `(asin, pais)`.
+**`src/supabase-client.ts`** — Supabase REST client. Three upsert functions:
+- `upsertProductos` — full upsert, excludes `rating` field (managed exclusively by `upsertRatings` to avoid overwriting with null). Composite PK is `(asin, pais)`.
+- `upsertBuyboxOnly` — partial upsert, only updates buybox/price fields, never touches `titulo`/`marca`/`img_url`. Used when Keepa returns a product without a title (ASIN not listed in that marketplace).
+- `upsertRatings` — writes only the `rating` field.
+Also contains `getViolations()`, `getLastAlertSent()`, `setLastAlertSent()` for the exclusive-brand alert system.
+
+**`src/exclusive-brands.ts`** — pure config (no I/O). Key exports:
+- `ALERT_EXCLUDED_ASINS` — ASINs that never trigger alert emails regardless of brand rules. Edit this Set to silence specific ASINs.
+- `EDIFIER_ES_ASINS` — specific Edifier ASINs monitored exclusively in ES.
+- `ES_ONLY_BRANDS` (fiio, eversolo) — exclusive brands for ES only.
+- `ALL_EU_BRANDS` (vulkkano, hiby) — exclusive brands for all 4 markets.
+- `isExclusiveBrand(asin, marca, pais)` — single entry point; returns false immediately if ASIN is in `ALERT_EXCLUDED_ASINS`.
+
+**`src/alert-client.ts`** — sends violation alert emails via Resend REST API (no npm package, native fetch). `sendViolationAlert(violations, resendApiKey, recipient)` returns `{ ok: true, id }` or `{ ok: false, error }` — never throws, so email failures never abort the pipeline.
 
 **Supabase tables**:
 | Table | Purpose |
 |---|---|
 | `productos` | Main data, PK: (asin, pais) |
-| `batch_state` | Single row tracking current batch number |
+| `batch_state` | Key-value store: `current_batch` (int) + `last_alert_sent` (Unix ms timestamp) |
 | `categorias_cache` | Category names, 24h TTL |
 | `vendedores_cache` | Seller display names, permanent |
 | `user_favorites` | Per-user favorite ASINs (username → array) |
 | `custom_asins` | ASINs added via dashboard Excel upload |
 | `disabled_asins` | ASINs removed via dashboard delete button |
+
+**Exclusive-brand alert system** — triggers on every round completion (`nextBatch === 1` after batch advance, ~every 4 hours):
+- Queries `productos` for rows where `hay_buybox=true AND tenemos=false`, filters by `isExclusiveBrand`
+- Throttled to once per UTC day via `last_alert_sent` in `batch_state`. **Important**: `setLastAlertSent` is called even when there are 0 violations — so once the first round of the day completes, subsequent rounds that day are skipped regardless of new violations appearing.
+- Requires `RESEND_API_KEY` env var; degrades gracefully (logs warning) if missing
 
 **`index.html`** — everything in one file: CSS, HTML, JS. Key globals:
 - `activeFilters` (Set) — button filters (fba/fbm/win/lose/changed/fav); empty = show all
@@ -75,7 +94,7 @@ GitHub Pages → index.html
 - `applyFilters()` — re-runs all filters and re-renders the table
 - Dashboard default filters (FBA + Vulkkano brand) are set in `loadData()` after `updateSelects()` runs
 - `deleteAsin(asin, event)` — removes ASIN from `disabled_asins` + `productos` + `custom_asins`, updates view; only available to logged-in users
-- `processAsinFile()` — parses uploaded Excel/CSV (SheetJS CDN), inserts new ASINs into `custom_asins`; SheetJS loaded at bottom of body, not in `<head>`
+- `processAsinFile()` — parses uploaded Excel/CSV (SheetJS CDN), inserts into `custom_asins` **and removes from `disabled_asins`** (so re-adding a previously deleted ASIN works correctly); SheetJS loaded at bottom of body, not in `<head>`
 
 ## Environment variables
 
@@ -91,5 +110,6 @@ GitHub Pages → index.html
 | `ASINS_OVERRIDE` | No | Comma-separated ASINs for test runs (skips batch rotation and dynamic ASIN merge) |
 | `BATCH_SIZE` | No | ASINs per batch, default 50 |
 | `CLEAR_TABLE` | No | `true` to wipe table before loading (test only) |
+| `RESEND_API_KEY` | No | Resend API key for exclusive-brand violation emails |
 
 Local: add to `.env`. Production: add to GitHub Secrets (Actions uses these).
